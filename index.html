@@ -2035,13 +2035,11 @@ let pinMoveMode = false;
 let pinMoveItem = null;
 let pinMoveOrigLat = 0;
 let pinMoveOrigLng = 0;
+let pinMoveTempMarker = null;
 
 function startPinMove(item) {
   if (!item) return;
   if (pinMoveMode) cancelPinMove();
-
-  const marker = allMarkers[item.id];
-  if (!marker) { showToast('⚠️ マーカーが見つかりません'); return; }
 
   pinMoveMode = true;
   pinMoveItem = item;
@@ -2052,49 +2050,64 @@ function startPinMove(item) {
   map.setCenter({ lat: item.lat, lng: item.lng });
   map.setZoom(18);
 
-  // マップが安定してからドラッグ設定（クラスター再描画と競合しないよう）
   google.maps.event.addListenerOnce(map, 'idle', () => {
-    cluster.removeMarker(marker, true);
-    marker.setMap(map);
-    marker.setDraggable(true);
-    marker.setIcon(makeIcon(item.category, true));
+    // 元マーカーを非表示
+    const orig = allMarkers[item.id];
+    if (orig) { cluster.removeMarker(orig, true); orig.setMap(null); }
+
+    // ドラッグ専用の一時マーカーを新規作成
+    pinMoveTempMarker = new google.maps.Marker({
+      position: { lat: item.lat, lng: item.lng },
+      map,
+      draggable: true,
+      icon: makeIcon(item.category, true),
+      zIndex: 9999
+    });
+
     document.getElementById('pin-move-hint').style.display = 'flex';
   });
 }
 
 window.savePinMove = async function() {
-  if (!pinMoveItem) return;
-  const marker = allMarkers[pinMoveItem.id];
-  if (!marker) { cancelPinMove(); return; }
+  if (!pinMoveItem || !pinMoveTempMarker) return;
 
-  const pos = marker.getPosition();
+  const pos = pinMoveTempMarker.getPosition();
   const lat = parseFloat(pos.lat().toFixed(6));
   const lng = parseFloat(pos.lng().toFixed(6));
 
+  // 一時マーカーを削除
+  pinMoveTempMarker.setMap(null);
+  pinMoveTempMarker = null;
+
+  // 元マーカーを新位置でクラスターに戻す
+  const orig = allMarkers[pinMoveItem.id];
+  if (orig) {
+    orig.setPosition({ lat, lng });
+    orig.setIcon(makeIcon(pinMoveItem.category, false));
+    cluster.addMarker(orig);
+  }
+
   const live = liveData.find(x => x.id === pinMoveItem.id);
   if (live) { live.lat = lat; live.lng = lng; }
-
-  marker.setDraggable(false);
-  marker.setIcon(makeIcon(pinMoveItem.category, false));
-  cluster.addMarker(marker);
-
   await saveEdit(pinMoveItem.id, { lat, lng });
 
   document.getElementById('pin-move-hint').style.display = 'none';
   pinMoveMode = false;
   showToast('📍 ピンの位置を保存しました');
-  showDetail(liveData.find(x => x.id === pinMoveItem.id));
+  const saved = liveData.find(x => x.id === pinMoveItem.id);
   pinMoveItem = null;
+  if (saved) showDetail(saved);
 };
 
 function cancelPinMove() {
+  if (pinMoveTempMarker) { pinMoveTempMarker.setMap(null); pinMoveTempMarker = null; }
+
   if (pinMoveItem) {
-    const marker = allMarkers[pinMoveItem.id];
-    if (marker) {
-      marker.setDraggable(false);
-      marker.setPosition({ lat: pinMoveOrigLat, lng: pinMoveOrigLng });
-      marker.setIcon(makeIcon(pinMoveItem.category, false));
-      cluster.addMarker(marker);
+    const orig = allMarkers[pinMoveItem.id];
+    if (orig) {
+      orig.setPosition({ lat: pinMoveOrigLat, lng: pinMoveOrigLng });
+      orig.setIcon(makeIcon(pinMoveItem.category, false));
+      cluster.addMarker(orig);
     }
   }
   pinMoveMode = false;
