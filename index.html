@@ -541,21 +541,21 @@
 
     /* ── Pin-move hint ────────────────────────── */
     #pin-move-hint {
-      position: absolute;
-      top: 12px; left: 50%; transform: translateX(-50%);
+      position: fixed;
+      top: 70px; left: 50%; transform: translateX(-50%);
       background: rgba(15,42,94,0.95);
       color: white;
-      padding: 10px 16px;
+      padding: 12px 20px;
       border-radius: 24px;
       font-size: 13px;
       font-weight: 600;
-      z-index: 9000;
+      z-index: 99999;
       display: none;
       pointer-events: auto;
       white-space: nowrap;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
     #pin-move-save {
       background: #34a853;
@@ -579,13 +579,12 @@
 
     /* ── Map Crosshair ───────────────────────── */
     #map-crosshair {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
+      position: fixed;
       width: 60px; height: 60px;
-      z-index: 9000;
+      z-index: 99999;
       display: none;
       pointer-events: none;
+      transform: translate(-50%, -50%);
     }
     .ch-v {
       position: absolute;
@@ -2090,7 +2089,12 @@ function startPinMove(item) {
   map.setCenter({ lat: item.lat, lng: item.lng });
   map.setZoom(18);
 
-  document.getElementById('map-crosshair').style.display = 'block';
+  // 十字線をマップ中央に fixed 配置
+  const rect = document.getElementById('map').getBoundingClientRect();
+  const ch = document.getElementById('map-crosshair');
+  ch.style.left = (rect.left + rect.width / 2) + 'px';
+  ch.style.top  = (rect.top  + rect.height / 2) + 'px';
+  ch.style.display = 'block';
   document.getElementById('pin-move-hint').style.display = 'flex';
 }
 
