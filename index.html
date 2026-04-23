@@ -543,17 +543,17 @@
     #pin-move-hint {
       position: absolute;
       top: 12px; left: 50%; transform: translateX(-50%);
-      background: rgba(15,42,94,0.92);
+      background: rgba(15,42,94,0.95);
       color: white;
       padding: 10px 16px;
       border-radius: 24px;
       font-size: 13px;
       font-weight: 600;
-      z-index: 700;
+      z-index: 9000;
       display: none;
       pointer-events: auto;
       white-space: nowrap;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
       align-items: center;
       gap: 8px;
     }
@@ -583,7 +583,7 @@
       top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       width: 60px; height: 60px;
-      z-index: 700;
+      z-index: 9000;
       display: none;
       pointer-events: none;
     }
@@ -1039,16 +1039,18 @@
       <div class="drop-text">ここにファイルをドロップ</div>
       <div class="drop-sub">Excel / PowerPoint → 自動読み込み＋フォームを開く</div>
     </div>
-    <div id="pin-move-hint">
-      <span>🎯 マップをスクロールして位置を合わせて保存</span>
-      <button id="pin-move-save" onclick="window.savePinMove()">✅ 保存</button>
-      <button id="pin-move-cancel" onclick="cancelPinMove()">キャンセル</button>
-    </div>
-    <div id="map-crosshair">
-      <div class="ch-v"></div>
-      <div class="ch-h"></div>
-      <div class="ch-dot"></div>
-    </div>
+  </div>
+
+  <!-- ピン修正UI（#mainの直下に配置してGoogleMapsに隠れないようにする） -->
+  <div id="pin-move-hint">
+    <span>🎯 マップをスクロールして位置を合わせて保存</span>
+    <button id="pin-move-save" onclick="window.savePinMove()">✅ 保存</button>
+    <button id="pin-move-cancel" onclick="cancelPinMove()">キャンセル</button>
+  </div>
+  <div id="map-crosshair">
+    <div class="ch-v"></div>
+    <div class="ch-h"></div>
+    <div class="ch-dot"></div>
   </div>
 
   <!-- DETAIL PANEL -->
