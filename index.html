@@ -2060,59 +2060,86 @@ window.checkPw = function() {
 };
 
 /* ================================================================
-   PIN MOVE MODE（ドラッグ方式）
+   PIN MOVE MODE（マップ中心・十字線方式）
    ================================================================ */
 let pinMoveMode = false;
 let pinMoveItem = null;
 let pinMoveControlDiv = null;
-let pinMoveOrigLatLng = null;
+let pinMoveCrosshairEl = null;
+
+function _buildCrosshair() {
+  if (pinMoveCrosshairEl) return;
+  const el = document.createElement('div');
+  // 画面中央固定・ポインターイベント無効・最前面
+  el.style.cssText = [
+    'position:fixed',
+    'width:80px',
+    'height:80px',
+    'pointer-events:none',
+    'z-index:2147483647',
+    'transform:translate(-50%,-50%)',
+    'display:none'
+  ].join(';');
+  // 縦線
+  el.innerHTML =
+    '<div style="position:absolute;left:50%;top:0;transform:translateX(-50%);width:3px;height:100%;background:#dc3545"></div>' +
+    '<div style="position:absolute;top:50%;left:0;transform:translateY(-50%);height:3px;width:100%;background:#dc3545"></div>' +
+    '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);' +
+      'width:14px;height:14px;border-radius:50%;background:#dc3545;' +
+      'box-shadow:0 0 0 3px white,0 0 0 7px rgba(220,53,69,0.5)"></div>';
+  document.body.appendChild(el);
+  pinMoveCrosshairEl = el;
+}
+
+function _placeCrosshair() {
+  if (!pinMoveCrosshairEl) return;
+  const rect = document.getElementById('map').getBoundingClientRect();
+  pinMoveCrosshairEl.style.left = (rect.left + rect.width  / 2) + 'px';
+  pinMoveCrosshairEl.style.top  = (rect.top  + rect.height / 2) + 'px';
+  pinMoveCrosshairEl.style.display = 'block';
+}
 
 function startPinMove(item) {
   if (!item || !item.lat || !item.lng) { showToast('⚠️ 位置情報がありません'); return; }
   if (pinMoveMode) cancelPinMove();
 
-  const marker = allMarkers[item.id];
-  if (!marker) { showToast('⚠️ マーカーが見つかりません'); return; }
-
   pinMoveMode = true;
   pinMoveItem = item;
-  pinMoveOrigLatLng = { lat: item.lat, lng: item.lng };
 
   closeDetail();
-
-  // クラスターから外して単独でマップに表示
-  cluster.removeMarker(marker, true);
-  marker.setMap(map);
-  marker.setDraggable(true);
-  marker.setIcon(makeIcon(item.category, true));
-  marker.setCursor('grab');
-
   map.setCenter({ lat: item.lat, lng: item.lng });
   map.setZoom(18);
 
-  // ヒントバーをGoogle Maps公式コントロールとして表示
+  // ① ヒントバー（Google Maps公式コントロール → 確実に地図上に表示）
   pinMoveControlDiv = document.createElement('div');
   pinMoveControlDiv.style.cssText = 'margin-top:10px;user-select:none';
   pinMoveControlDiv.innerHTML =
-    '<div style="background:rgba(15,42,94,0.95);color:white;padding:10px 18px;border-radius:24px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.5);display:flex;align-items:center;gap:12px">' +
-    '<span>📍 ピンをドラッグして正しい位置に移動してください</span>' +
-    '<button id="_pinSave" style="background:#34a853;border:none;color:white;padding:5px 14px;border-radius:12px;cursor:pointer;font-size:13px;font-weight:700">✅ 保存</button>' +
-    '<button id="_pinCancel" style="background:rgba(255,255,255,0.25);border:none;color:white;padding:5px 10px;border-radius:12px;cursor:pointer;font-size:13px">✕</button>' +
+    '<div style="background:rgba(15,42,94,0.95);color:white;padding:10px 18px;border-radius:24px;' +
+    'font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.5);display:flex;align-items:center;gap:12px">' +
+    '<span>🎯 マップを動かして十字線を目標位置に合わせてください</span>' +
+    '<button id="_pinSave" style="background:#34a853;border:none;color:white;padding:5px 14px;' +
+    'border-radius:12px;cursor:pointer;font-size:13px;font-weight:700">✅ 保存</button>' +
+    '<button id="_pinCancel" style="background:rgba(255,255,255,0.25);border:none;color:white;' +
+    'padding:5px 10px;border-radius:12px;cursor:pointer;font-size:13px">✕</button>' +
     '</div>';
   map.controls[google.maps.ControlPosition.TOP_CENTER].push(pinMoveControlDiv);
   pinMoveControlDiv.querySelector('#_pinSave').onclick   = window.savePinMove;
   pinMoveControlDiv.querySelector('#_pinCancel').onclick = cancelPinMove;
+
+  // ② 十字線（body直接追加・z-index最大値）
+  _buildCrosshair();
+  // マップの中心座標が確定してから配置
+  google.maps.event.addListenerOnce(map, 'idle', _placeCrosshair);
 }
 
 window.savePinMove = async function() {
   if (!pinMoveItem) return;
+  const center = map.getCenter();
+  const lat = parseFloat(center.lat().toFixed(6));
+  const lng = parseFloat(center.lng().toFixed(6));
+
   const marker = allMarkers[pinMoveItem.id];
-  if (!marker) return;
-
-  const pos = marker.getPosition();
-  const lat = parseFloat(pos.lat().toFixed(6));
-  const lng = parseFloat(pos.lng().toFixed(6));
-
+  if (marker) marker.setPosition({ lat, lng });
   const live = liveData.find(x => x.id === pinMoveItem.id);
   if (live) { live.lat = lat; live.lng = lng; }
   await saveEdit(pinMoveItem.id, { lat, lng });
@@ -2127,29 +2154,19 @@ window.savePinMove = async function() {
 };
 
 function cancelPinMove() {
-  if (pinMoveItem && allMarkers[pinMoveItem.id] && pinMoveOrigLatLng) {
-    allMarkers[pinMoveItem.id].setPosition(pinMoveOrigLatLng);
-  }
   _pinMoveCleanup();
   pinMoveItem = null;
 }
 
 function _pinMoveCleanup() {
   pinMoveMode = false;
-  if (pinMoveItem && allMarkers[pinMoveItem.id]) {
-    const marker = allMarkers[pinMoveItem.id];
-    marker.setDraggable(false);
-    marker.setCursor(null);
-    const d = liveData.find(x => x.id === pinMoveItem.id);
-    if (d) marker.setIcon(makeIcon(d.category, false));
-    marker.setMap(null);
-    cluster.addMarker(marker, true);
-  }
   if (pinMoveControlDiv) {
     map.controls[google.maps.ControlPosition.TOP_CENTER].clear();
     pinMoveControlDiv = null;
   }
-  pinMoveOrigLatLng = null;
+  if (pinMoveCrosshairEl) {
+    pinMoveCrosshairEl.style.display = 'none';
+  }
 }
 
 /* ================================================================
