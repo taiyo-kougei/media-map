@@ -2060,43 +2060,49 @@ window.checkPw = function() {
 };
 
 /* ================================================================
-   PIN MOVE MODE（マップ中心・十字線方式）
+   PIN MOVE MODE（OverlayView 十字線方式）
+   Google Maps 公式 OverlayView を使うことで確実に地図上に表示
    ================================================================ */
 let pinMoveMode = false;
 let pinMoveItem = null;
 let pinMoveControlDiv = null;
-let pinMoveCrosshairEl = null;
+let pinMoveOverlay = null;
 
-function _buildCrosshair() {
-  if (pinMoveCrosshairEl) return;
-  const el = document.createElement('div');
-  // 画面中央固定・ポインターイベント無効・最前面
-  el.style.cssText = [
-    'position:fixed',
-    'width:80px',
-    'height:80px',
-    'pointer-events:none',
-    'z-index:2147483647',
-    'transform:translate(-50%,-50%)',
-    'display:none'
-  ].join(';');
-  // 縦線
-  el.innerHTML =
-    '<div style="position:absolute;left:50%;top:0;transform:translateX(-50%);width:3px;height:100%;background:#dc3545"></div>' +
-    '<div style="position:absolute;top:50%;left:0;transform:translateY(-50%);height:3px;width:100%;background:#dc3545"></div>' +
-    '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);' +
-      'width:14px;height:14px;border-radius:50%;background:#dc3545;' +
-      'box-shadow:0 0 0 3px white,0 0 0 7px rgba(220,53,69,0.5)"></div>';
-  document.body.appendChild(el);
-  pinMoveCrosshairEl = el;
-}
+/* ── 十字線オーバーレイクラス ── */
+class CrosshairOverlay extends google.maps.OverlayView {
+  constructor() { super(); this._el = null; }
 
-function _placeCrosshair() {
-  if (!pinMoveCrosshairEl) return;
-  const rect = document.getElementById('map').getBoundingClientRect();
-  pinMoveCrosshairEl.style.left = (rect.left + rect.width  / 2) + 'px';
-  pinMoveCrosshairEl.style.top  = (rect.top  + rect.height / 2) + 'px';
-  pinMoveCrosshairEl.style.display = 'block';
+  onAdd() {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute;width:80px;height:80px;pointer-events:none;transform:translate(-50%,-50%)';
+    el.innerHTML =
+      '<div style="position:absolute;left:50%;top:0;transform:translateX(-50%);width:3px;height:100%;background:#dc3545;opacity:0.9"></div>' +
+      '<div style="position:absolute;top:50%;left:0;transform:translateY(-50%);height:3px;width:100%;background:#dc3545;opacity:0.9"></div>' +
+      '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);' +
+        'width:16px;height:16px;border-radius:50%;background:#dc3545;' +
+        'box-shadow:0 0 0 3px white,0 0 0 8px rgba(220,53,69,0.55)"></div>';
+    // floatPane = Maps の最上位レイヤー
+    this.getPanes().floatPane.appendChild(el);
+    this._el = el;
+  }
+
+  draw() {
+    // マップ中心座標をピクセル位置に変換して十字線を配置
+    const proj = this.getProjection();
+    if (!proj) return;
+    const pos = proj.fromLatLngToDivPixel(this.getMap().getCenter());
+    if (this._el && pos) {
+      this._el.style.left = pos.x + 'px';
+      this._el.style.top  = pos.y + 'px';
+    }
+  }
+
+  onRemove() {
+    if (this._el) {
+      if (this._el.parentNode) this._el.parentNode.removeChild(this._el);
+      this._el = null;
+    }
+  }
 }
 
 function startPinMove(item) {
@@ -2110,7 +2116,7 @@ function startPinMove(item) {
   map.setCenter({ lat: item.lat, lng: item.lng });
   map.setZoom(18);
 
-  // ① ヒントバー（Google Maps公式コントロール → 確実に地図上に表示）
+  // ① ヒントバー（Google Maps 公式コントロール）
   pinMoveControlDiv = document.createElement('div');
   pinMoveControlDiv.style.cssText = 'margin-top:10px;user-select:none';
   pinMoveControlDiv.innerHTML =
@@ -2126,10 +2132,9 @@ function startPinMove(item) {
   pinMoveControlDiv.querySelector('#_pinSave').onclick   = window.savePinMove;
   pinMoveControlDiv.querySelector('#_pinCancel').onclick = cancelPinMove;
 
-  // ② 十字線（body直接追加・z-index最大値）
-  _buildCrosshair();
-  // マップの中心座標が確定してから配置
-  google.maps.event.addListenerOnce(map, 'idle', _placeCrosshair);
+  // ② 十字線オーバーレイ（Maps の floatPane に直接描画）
+  pinMoveOverlay = new CrosshairOverlay();
+  pinMoveOverlay.setMap(map);
 }
 
 window.savePinMove = async function() {
@@ -2160,12 +2165,13 @@ function cancelPinMove() {
 
 function _pinMoveCleanup() {
   pinMoveMode = false;
+  if (pinMoveOverlay) {
+    pinMoveOverlay.setMap(null);
+    pinMoveOverlay = null;
+  }
   if (pinMoveControlDiv) {
     map.controls[google.maps.ControlPosition.TOP_CENTER].clear();
     pinMoveControlDiv = null;
-  }
-  if (pinMoveCrosshairEl) {
-    pinMoveCrosshairEl.style.display = 'none';
   }
 }
 
