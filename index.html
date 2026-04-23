@@ -1,0 +1,2406 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>太陽巧芸社｜媒体マップ</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #f0f2f5;
+    }
+
+    /* ── Header ─────────────────────────────── */
+    #header {
+      background: linear-gradient(135deg, #0f2a5e 0%, #1a3a6b 100%);
+      color: white;
+      padding: 0 16px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 1000;
+      flex-shrink: 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+    #header-logo {
+      font-size: 20px;
+      line-height: 1;
+    }
+    #header-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+    #header-subtitle {
+      font-size: 10px;
+      opacity: 0.7;
+      display: block;
+      font-weight: 400;
+      letter-spacing: 0.05em;
+    }
+    .badge-group {
+      display: flex;
+      gap: 6px;
+      margin-left: auto;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+      letter-spacing: 0.02em;
+    }
+    .badge-managed { background: rgba(26,115,232,0.9); border: 1px solid rgba(255,255,255,0.2); }
+    .badge-surveyed { background: rgba(234,67,53,0.9); border: 1px solid rgba(255,255,255,0.2); }
+
+    /* ── Main Layout ─────────────────────────── */
+    #main { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+    /* ── Sidebar ─────────────────────────────── */
+    #sidebar {
+      width: 320px;
+      flex-shrink: 0;
+      background: #f8f9fa;
+      border-right: 1px solid #dde1e7;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: width 0.3s cubic-bezier(0.4,0,0.2,1);
+      z-index: 100;
+    }
+    #sidebar.collapsed { width: 0; }
+
+    /* Filter panel */
+    #filter-panel {
+      padding: 12px;
+      background: white;
+      border-bottom: 1px solid #e8eaed;
+      flex-shrink: 0;
+    }
+    .search-wrap {
+      position: relative;
+      margin-bottom: 10px;
+    }
+    .search-icon {
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #9aa0a6;
+      font-size: 14px;
+      pointer-events: none;
+    }
+    #search-box {
+      width: 100%;
+      padding: 8px 12px 8px 32px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 20px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+      background: #f8f9fa;
+    }
+    #search-box:focus { border-color: #1a3a6b; background: white; }
+
+    .filter-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+    .filter-row:last-child { margin-bottom: 0; }
+
+    .filter-btn {
+      padding: 5px 12px;
+      border: 1.5px solid #dadce0;
+      border-radius: 16px;
+      font-size: 12px;
+      cursor: pointer;
+      background: white;
+      color: #3c4043;
+      font-weight: 500;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .filter-btn:hover { background: #f1f3f4; }
+    .filter-btn.active { background: #1a3a6b; color: white; border-color: #1a3a6b; }
+    .filter-btn.active-red { background: #ea4335; color: white; border-color: #ea4335; }
+
+    .filter-select {
+      padding: 5px 8px;
+      border: 1.5px solid #dadce0;
+      border-radius: 16px;
+      font-size: 12px;
+      background: white;
+      cursor: pointer;
+      color: #3c4043;
+      outline: none;
+      max-width: 130px;
+    }
+
+    /* Result count */
+    #result-count {
+      font-size: 11px;
+      color: #80868b;
+      padding: 6px 12px;
+      background: white;
+      border-bottom: 1px solid #f0f0f0;
+      flex-shrink: 0;
+      font-weight: 500;
+    }
+
+    /* Media list */
+    #media-list {
+      overflow-y: auto;
+      flex: 1;
+      padding: 8px;
+    }
+    #media-list::-webkit-scrollbar { width: 4px; }
+    #media-list::-webkit-scrollbar-track { background: transparent; }
+    #media-list::-webkit-scrollbar-thumb { background: #dadce0; border-radius: 2px; }
+
+    .media-item {
+      background: white;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 5px;
+      cursor: pointer;
+      border: 1.5px solid #e8eaed;
+      transition: all 0.15s;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .media-item:hover { border-color: #aab0ff; box-shadow: 0 2px 8px rgba(26,58,107,0.12); }
+    .media-item.active { border-color: #1a73e8; background: #e8f0fe; box-shadow: 0 2px 10px rgba(26,115,232,0.2); }
+
+    .item-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 4px;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.8), 0 0 0 3px currentColor;
+    }
+    .dot-managed { background: #1a73e8; color: #1a73e8; }
+    .dot-surveyed { background: #ea4335; color: #ea4335; }
+
+    .item-content { flex: 1; min-width: 0; }
+    .item-name { font-size: 13px; font-weight: 600; color: #202124; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item-address { font-size: 11px; color: #5f6368; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item-meta { font-size: 11px; color: #9aa0a6; margin-top: 3px; }
+    .item-price { font-weight: 600; color: #1a3a6b; }
+
+    #no-results { text-align: center; padding: 40px 16px; color: #9aa0a6; font-size: 13px; display: none; }
+
+    /* ── Sidebar Toggle ──────────────────────── */
+    #sidebar-toggle {
+      position: absolute;
+      left: 320px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 800;
+      background: white;
+      border: none;
+      border-left: none;
+      border-radius: 0 8px 8px 0;
+      width: 18px;
+      height: 52px;
+      cursor: pointer;
+      box-shadow: 3px 0 8px rgba(0,0,0,0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      color: #9aa0a6;
+      transition: left 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    #sidebar-toggle.collapsed { left: 0; }
+    #sidebar-toggle:hover { background: #f1f3f4; color: #1a3a6b; }
+
+    /* ── Map ─────────────────────────────────── */
+    #map { flex: 1; z-index: 1; }
+
+    /* ── Detail Panel ────────────────────────── */
+    #detail-panel {
+      position: absolute;
+      top: 0; right: 0;
+      width: 360px;
+      height: 100%;
+      background: white;
+      box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+      z-index: 600;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    #detail-panel.open { transform: translateX(0); }
+
+    #detail-header {
+      padding: 16px;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-shrink: 0;
+    }
+    #detail-header.managed { background: linear-gradient(135deg, #1557b0, #1a73e8); }
+    #detail-header.surveyed { background: linear-gradient(135deg, #b71c1c, #ea4335); }
+
+    /* 編集ボタン行：ヘッダー直下に常時表示 */
+    #detail-action-bar {
+      display: flex;
+      gap: 6px;
+      padding: 10px 14px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e8eaed;
+      flex-shrink: 0;
+    }
+    #detail-action-bar .dab-btn {
+      flex: 1;
+      padding: 8px 6px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid #dadce0;
+      background: white;
+      color: #3c4043;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    #detail-action-bar .dab-btn:hover { border-color: #1a3a6b; color: #1a3a6b; background: #e8f0fe; }
+    #detail-action-bar .dab-btn.pin:hover { border-color: #f29900; color: #f29900; background: #fef9e7; }
+    #detail-action-bar .dab-btn.drive { border-color: #1a73e8; color: #1a73e8; }
+    #detail-action-bar .dab-btn.drive:hover { background: #e8f0fe; }
+    #detail-action-bar .dab-btn.maps { border-color: #34a853; color: #34a853; }
+    #detail-action-bar .dab-btn.maps:hover { background: #e6f4ea; }
+    #detail-action-bar .dab-btn.sv { border-color: #f29900; color: #f29900; }
+    #detail-action-bar .dab-btn.sv:hover { background: #fef9e7; }
+
+    #detail-title { font-size: 15px; font-weight: 700; line-height: 1.3; padding-right: 8px; }
+    #detail-category { font-size: 11px; margin-top: 4px; opacity: 0.9; font-weight: 500; }
+    #detail-close {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    #detail-close:hover { background: rgba(255,255,255,0.35); }
+
+    /* Image preview */
+    #detail-image-wrap {
+      flex-shrink: 0;
+      background: #f0f2f5;
+      overflow: hidden;
+      max-height: 200px;
+      display: none;
+    }
+    #detail-image-wrap img {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+    }
+
+    #detail-body {
+      overflow-y: auto;
+      flex: 1;
+      padding: 16px;
+    }
+    #detail-body::-webkit-scrollbar { width: 4px; }
+    #detail-body::-webkit-scrollbar-thumb { background: #dadce0; border-radius: 2px; }
+
+    .detail-section { margin-bottom: 18px; }
+    .detail-section-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: #9aa0a6;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #f0f2f5;
+    }
+    .detail-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 7px;
+      font-size: 13px;
+      align-items: flex-start;
+    }
+    .detail-label { color: #5f6368; flex-shrink: 0; width: 72px; padding-top: 1px; }
+    .detail-value { color: #202124; font-weight: 500; flex: 1; line-height: 1.5; }
+    .detail-value.price { color: #1a3a6b; font-weight: 700; font-size: 14px; }
+    .detail-value.notes { color: #5f6368; font-weight: 400; font-size: 12px; white-space: pre-wrap; }
+
+    .drive-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      width: 100%;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .drive-btn:hover { background: #1557b0; transform: translateY(-1px); }
+    .drive-btn:active { transform: translateY(0); }
+    .drive-btn.disabled { background: #e8eaed; color: #9aa0a6; cursor: default; pointer-events: none; }
+
+    .maps-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: white;
+      color: #1a73e8;
+      border: 1.5px solid #1a73e8;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      width: 100%;
+      margin-top: 8px;
+      transition: background 0.15s;
+    }
+    .maps-btn:hover { background: #e8f0fe; }
+
+
+    /* ── Mobile ──────────────────────────────── */
+    #mobile-menu-btn {
+      display: none;
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 800;
+      background: white;
+      border: none;
+      border-radius: 10px;
+      width: 40px; height: 40px;
+      align-items: center; justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      font-size: 18px;
+    }
+    #mobile-overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 850;
+      display: none;
+    }
+
+    @media (max-width: 768px) {
+      #sidebar {
+        position: absolute;
+        z-index: 900;
+        left: 0; top: 0;
+        width: 290px !important;
+        height: 100%;
+        transform: translateX(-100%);
+        transition: transform 0.3s;
+        box-shadow: 4px 0 20px rgba(0,0,0,0.2);
+      }
+      #sidebar.mobile-open { transform: translateX(0); width: 290px !important; }
+      #sidebar-toggle { display: none; }
+      #mobile-menu-btn { display: flex; }
+      #detail-panel {
+        width: 100% !important;
+        height: 80%;
+        top: auto; bottom: 0;
+        border-radius: 20px 20px 0 0;
+        transform: translateY(100%);
+      }
+      #detail-panel.open { transform: translateY(0); }
+      .badge-group { gap: 4px; }
+      .badge { font-size: 10px; padding: 2px 7px; }
+      #header-title { font-size: 13px; }
+    }
+
+    @media (min-width: 769px) {
+      #mobile-overlay { display: none !important; }
+    }
+
+    /* ── Loading overlay ─────────────────────── */
+    #loading-overlay {
+      position: fixed; inset: 0;
+      background: linear-gradient(135deg, #0f2a5e, #1a3a6b);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      transition: opacity 0.5s ease;
+    }
+    #loading-overlay.fade-out { opacity: 0; pointer-events: none; }
+    .loading-logo { font-size: 48px; margin-bottom: 16px; }
+    .loading-title { font-size: 18px; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .loading-sub { font-size: 12px; opacity: 0.7; margin-bottom: 32px; letter-spacing: 0.1em; }
+    .loading-bar-wrap {
+      width: 200px; height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .loading-bar {
+      height: 100%;
+      background: white;
+      border-radius: 2px;
+      animation: loadbar 1.5s ease-in-out infinite;
+    }
+    .loading-status { font-size: 11px; opacity: 0.6; margin-top: 12px; }
+    @keyframes loadbar {
+      0%   { width: 0%; margin-left: 0; }
+      50%  { width: 60%; margin-left: 20%; }
+      100% { width: 0%; margin-left: 100%; }
+    }
+
+    /* ── Data source indicator ───────────────── */
+    #data-source-bar {
+      font-size: 10px;
+      padding: 4px 12px;
+      background: #e8f5e9;
+      color: #2e7d32;
+      border-bottom: 1px solid #c8e6c9;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    #data-source-bar.local { background: #fff8e1; color: #f57f17; border-color: #ffe082; }
+    #data-updated { margin-left: auto; opacity: 0.8; }
+
+    /* ── Password overlay ─────────────────────── */
+    #pw-overlay, #signin-overlay {
+      position: fixed; inset: 0;
+      background: linear-gradient(135deg, #0f2a5e, #1a3a6b);
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+    #pw-box {
+      background: white;
+      border-radius: 16px;
+      padding: 36px 32px;
+      width: 320px;
+      color: #202124;
+      text-align: center;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+    }
+    #pw-box .pw-logo { font-size: 40px; margin-bottom: 12px; }
+    #pw-box h2 { font-size: 16px; font-weight: 700; color: #0f2a5e; margin-bottom: 4px; }
+    #pw-box p { font-size: 12px; color: #80868b; margin-bottom: 20px; }
+    #pw-input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #dadce0;
+      border-radius: 8px;
+      font-size: 15px;
+      outline: none;
+      letter-spacing: 4px;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    #pw-input:focus { border-color: #1a3a6b; }
+    #pw-error { font-size: 12px; color: #ea4335; margin-bottom: 8px; display: none; }
+    #pw-submit {
+      width: 100%;
+      padding: 11px;
+      background: linear-gradient(135deg, #0f2a5e, #1a73e8);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    #pw-submit:hover { opacity: 0.88; }
+
+    /* ── Pin-move hint ────────────────────────── */
+    #pin-move-hint {
+      position: absolute;
+      top: 12px; left: 50%; transform: translateX(-50%);
+      background: rgba(15,42,94,0.92);
+      color: white;
+      padding: 10px 16px;
+      border-radius: 24px;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 700;
+      display: none;
+      pointer-events: auto;
+      white-space: nowrap;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      align-items: center;
+      gap: 8px;
+    }
+    #pin-move-save {
+      background: #34a853;
+      border: none;
+      color: white;
+      padding: 4px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    #pin-move-cancel {
+      background: rgba(255,255,255,0.25);
+      border: none;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    /* ── Street View modal ───────────────────── */
+    #sv-modal {
+      position: fixed; inset: 0;
+      z-index: 20000;
+      background: #000;
+      display: none;
+      flex-direction: column;
+    }
+    #sv-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: #1a1a2e;
+      color: white;
+      flex-shrink: 0;
+    }
+    #sv-title { font-size: 14px; font-weight: 700; flex: 1; }
+    #sv-close-btn {
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: white;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #sv-close-btn:hover { background: rgba(255,255,255,0.28); }
+    #sv-pano { flex: 1; }
+
+    /* ── Sidebar bottom toolbar ───────────────── */
+    #sidebar-toolbar {
+      padding: 10px 12px;
+      border-top: 1px solid #e8eaed;
+      background: white;
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .toolbar-btn {
+      flex: 1;
+      padding: 8px 6px;
+      border: 1.5px solid #dadce0;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      background: white;
+      color: #3c4043;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .toolbar-btn:hover { background: #f1f3f4; border-color: #1a3a6b; color: #1a3a6b; }
+    .toolbar-btn.primary { background: #1a3a6b; color: white; border-color: #1a3a6b; }
+    .toolbar-btn.primary:hover { background: #0f2a5e; }
+
+    /* ── Form Modal ───────────────────────────── */
+    #form-modal {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    #form-box {
+      background: white;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 520px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    #form-header {
+      padding: 16px 20px;
+      background: linear-gradient(135deg, #0f2a5e, #1a3a6b);
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    #form-modal-title { font-size: 15px; font-weight: 700; }
+    #form-close-btn {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 14px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #form-close-btn:hover { background: rgba(255,255,255,0.35); }
+    #form-body {
+      overflow-y: auto;
+      flex: 1;
+      padding: 16px 20px;
+    }
+    #form-body::-webkit-scrollbar { width: 4px; }
+    #form-body::-webkit-scrollbar-thumb { background: #dadce0; border-radius: 2px; }
+    .form-section { margin-bottom: 16px; }
+    .form-section-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: #9aa0a6;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .form-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .form-field { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+    .form-label { font-size: 11px; font-weight: 600; color: #5f6368; }
+    .form-input {
+      padding: 8px 10px;
+      border: 1.5px solid #dadce0;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      width: 100%;
+      transition: border-color 0.2s;
+    }
+    .form-input:focus { border-color: #1a3a6b; }
+    .form-select {
+      padding: 8px 10px;
+      border: 1.5px solid #dadce0;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      background: white;
+      cursor: pointer;
+      width: 100%;
+    }
+    textarea.form-input { resize: vertical; min-height: 60px; }
+    #form-geocode-btn {
+      padding: 8px 12px;
+      background: #e8f0fe;
+      color: #1a3a6b;
+      border: 1.5px solid #c5d8fa;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      align-self: flex-end;
+    }
+    #form-geocode-btn:hover { background: #d0e4fd; }
+    #form-footer {
+      padding: 12px 20px;
+      border-top: 1px solid #e8eaed;
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    #form-delete-btn {
+      padding: 10px 16px;
+      background: white;
+      color: #ea4335;
+      border: 1.5px solid #ea4335;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: none;
+    }
+    #form-delete-btn:hover { background: #fce8e6; }
+    #form-save-btn {
+      flex: 1;
+      padding: 10px;
+      background: linear-gradient(135deg, #0f2a5e, #1a73e8);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #form-save-btn:hover { opacity: 0.88; }
+
+    /* ── Detail action buttons ────────────────── */
+    .detail-action-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .detail-action-btn {
+      flex: 1;
+      padding: 9px 8px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid #dadce0;
+      background: white;
+      color: #3c4043;
+      transition: all 0.15s;
+    }
+    .detail-action-btn:hover { border-color: #1a3a6b; color: #1a3a6b; background: #e8f0fe; }
+    .detail-action-btn.pin-btn:hover { border-color: #f29900; color: #f29900; background: #fef9e7; }
+    .drive-btn, .maps-btn {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      text-decoration: none;
+      cursor: pointer;
+      border: 1.5px solid #dadce0;
+      background: white;
+      color: #3c4043;
+    }
+    .drive-btn:hover { background: #e8f0fe; border-color: #1a73e8; color: #1a73e8; }
+    .drive-btn.disabled { color: #bdc1c6; cursor: default; }
+    .drive-btn.disabled:hover { background: white; border-color: #dadce0; }
+    .maps-btn { border-color: #34a853; color: #34a853; }
+    .maps-btn:hover { background: #e6f4ea; }
+
+    /* ── Form Drop Zone ───────────────────────── */
+    #form-dropzone {
+      border: 2px dashed #c5d8fa;
+      border-radius: 12px;
+      background: #f0f6ff;
+      padding: 20px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 16px;
+    }
+    #form-dropzone:hover, #form-dropzone.drag-over {
+      border-color: #1a73e8;
+      background: #e8f0fe;
+    }
+    #form-dropzone .dz-icon { font-size: 28px; margin-bottom: 6px; }
+    #form-dropzone .dz-text { font-size: 13px; font-weight: 600; color: #1a3a6b; margin-bottom: 2px; }
+    #form-dropzone .dz-sub  { font-size: 11px; color: #80868b; }
+    #form-dropzone input[type=file] { display: none; }
+
+    /* ── Form Image Preview ───────────────────── */
+    #form-image-preview {
+      display: none;
+      margin-bottom: 12px;
+    }
+    #form-image-preview .preview-title {
+      font-size: 11px; font-weight: 700; color: #5f6368;
+      margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .form-img-grid {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .form-img-wrap {
+      position: relative; border-radius: 8px; overflow: hidden;
+      border: 2px solid #e8eaed; cursor: pointer; transition: border-color 0.15s;
+      width: 90px; height: 70px; flex-shrink: 0;
+    }
+    .form-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .form-img-wrap:hover { border-color: #1a73e8; }
+    .form-img-wrap.selected { border-color: #1a73e8; box-shadow: 0 0 0 2px #1a73e8; }
+    .form-img-use {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(26,115,232,0.85); color: white; border: none;
+      font-size: 10px; font-weight: 700; padding: 3px 0; cursor: pointer;
+      display: none;
+    }
+    .form-img-wrap:hover .form-img-use { display: block; }
+    .form-img-wrap.selected .form-img-use { display: block; background: rgba(26,115,232,0.95); }
+    .form-img-del {
+      position: absolute; top: 3px; right: 3px;
+      background: rgba(234,67,53,0.88); color: white; border: none;
+      border-radius: 50%; width: 20px; height: 20px;
+      font-size: 11px; font-weight: 700; cursor: pointer;
+      display: none; align-items: center; justify-content: center;
+      line-height: 1;
+    }
+    .form-img-wrap:hover .form-img-del { display: flex; }
+
+    /* ── Map Drop Overlay ─────────────────────── */
+    #map-drop-overlay {
+      position: absolute; inset: 0; z-index: 500;
+      background: rgba(26,58,107,0.75);
+      display: none;
+      align-items: center; justify-content: center;
+      flex-direction: column; color: white;
+      pointer-events: none;
+      border: 4px dashed rgba(255,255,255,0.6);
+    }
+    #map-drop-overlay .drop-icon { font-size: 52px; margin-bottom: 12px; }
+    #map-drop-overlay .drop-text { font-size: 18px; font-weight: 700; letter-spacing: 0.05em; }
+    #map-drop-overlay .drop-sub  { font-size: 12px; opacity: 0.8; margin-top: 4px; }
+
+    /* ── Detail Gallery ───────────────────────── */
+    #detail-gallery {
+      display: none;
+      padding: 10px 14px;
+      flex-shrink: 0;
+      border-bottom: 1px solid #e8eaed;
+    }
+    #detail-gallery .gallery-title {
+      font-size: 10px; font-weight: 700; color: #9aa0a6;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .gallery-grid {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      max-height: 220px; overflow-y: auto;
+    }
+    .gallery-grid::-webkit-scrollbar { height: 4px; width: 4px; }
+    .gallery-grid::-webkit-scrollbar-thumb { background: #dadce0; border-radius: 2px; }
+    .gallery-item {
+      border-radius: 6px; overflow: hidden;
+      border: 1.5px solid #e8eaed; cursor: zoom-in;
+      width: calc(50% - 3px); aspect-ratio: 4/3; flex-shrink: 0;
+    }
+    .gallery-item img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity 0.15s; }
+    .gallery-item:hover img { opacity: 0.85; }
+
+    /* ── Toast ────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+      background: rgba(15,42,94,0.93); color: white;
+      padding: 10px 20px; border-radius: 24px;
+      font-size: 13px; font-weight: 600; z-index: 99997;
+      transition: opacity 0.4s; opacity: 0;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      pointer-events: none; white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── TOAST ── -->
+<div id="toast"></div>
+
+<!-- ── PASSWORD LOGIN ── -->
+<div id="signin-overlay" style="display:none">
+  <div id="pw-box">
+    <div class="pw-logo">🗾</div>
+    <h2>太陽巧芸社｜媒体マップ</h2>
+    <p>パスワードを入力してください</p>
+    <input id="pw-input" type="password" placeholder="パスワード" style="width:100%;padding:10px 14px;border:1.5px solid #dadce0;border-radius:8px;font-size:14px;margin-bottom:8px;outline:none" onkeydown="if(event.key==='Enter')window.checkPw()">
+    <button onclick="window.checkPw()" style="width:100%;padding:11px;background:#1a3a6b;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px">ログイン</button>
+    <div id="pw-error" style="font-size:12px;color:#ea4335;margin-top:4px;display:none">パスワードが違います</div>
+  </div>
+</div>
+
+<!-- ── LOADING ── -->
+<div id="loading-overlay">
+  <div class="loading-logo">🗾</div>
+  <div class="loading-title">太陽巧芸社｜媒体マップ</div>
+  <div class="loading-sub">TAIYO KOUGEI — MEDIA MANAGEMENT MAP</div>
+  <div class="loading-bar-wrap"><div class="loading-bar"></div></div>
+  <div class="loading-status" id="loading-status">データを読み込んでいます…</div>
+</div>
+
+<!-- ── HEADER ── -->
+<div id="header">
+  <span id="header-logo">🗾</span>
+  <div>
+    <span id="header-title">太陽巧芸社｜媒体マップ</span>
+    <span id="header-subtitle">TAIYO KOUGEI — MEDIA MANAGEMENT MAP</span>
+  </div>
+  <div class="badge-group">
+    <span class="badge badge-managed" id="badge-managed">管理中: 0件</span>
+    <span class="badge badge-surveyed" id="badge-surveyed">調査済み: 0件</span>
+  </div>
+</div>
+
+<!-- ── MAIN ── -->
+<div id="main">
+  <div id="mobile-overlay" onclick="closeMobileSidebar()"></div>
+  <button id="mobile-menu-btn" onclick="toggleMobileSidebar()">☰</button>
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div id="filter-panel">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-box" placeholder="媒体名・住所で検索..." oninput="applyFilters()">
+      </div>
+      <div class="filter-row">
+        <button class="filter-btn active" data-cat="all"      onclick="setCat(this,'all')">すべて</button>
+        <button class="filter-btn"        data-cat="管理中"   onclick="setCat(this,'管理中')">🔵 管理中</button>
+        <button class="filter-btn"        data-cat="調査済み" onclick="setCat(this,'調査済み')">🔴 調査済み</button>
+      </div>
+      <div class="filter-row" style="margin-top:8px;">
+        <select class="filter-select" id="sel-manager" onchange="applyFilters()">
+          <option value="">担当者：全員</option>
+        </select>
+        <select class="filter-select" id="sel-area" onchange="applyFilters()">
+          <option value="">エリア：全て</option>
+        </select>
+      </div>
+    </div>
+    <div id="data-source-bar" class="local">
+      <span id="data-source-icon">📂</span>
+      <span id="data-source-text">ローカルデータ</span>
+      <span id="data-updated"></span>
+    </div>
+    <div id="result-count">読み込み中…</div>
+    <div id="media-list"></div>
+    <div id="no-results">該当する媒体がありません</div>
+    <div id="sidebar-toolbar">
+      <button class="toolbar-btn primary" onclick="openFormAdd()">＋ 新規追加</button>
+      <button class="toolbar-btn" onclick="exportData()" title="変更をmedia_data.jsとしてダウンロード">⬇ エクスポート</button>
+    </div>
+  </div>
+
+  <!-- SIDEBAR TOGGLE -->
+  <button id="sidebar-toggle" onclick="toggleSidebar()">◀</button>
+
+  <!-- MAP -->
+  <div id="map"
+       ondragover="event.preventDefault();document.getElementById('map-drop-overlay').style.display='flex'"
+       ondragleave="if(!document.getElementById('map').contains(event.relatedTarget))document.getElementById('map-drop-overlay').style.display='none'"
+       ondrop="event.preventDefault();document.getElementById('map-drop-overlay').style.display='none';handleFileDrop(event.dataTransfer.files[0])">
+    <div id="map-drop-overlay">
+      <div class="drop-icon">📂</div>
+      <div class="drop-text">ここにファイルをドロップ</div>
+      <div class="drop-sub">Excel / PowerPoint → 自動読み込み＋フォームを開く</div>
+    </div>
+    <div id="pin-move-hint">
+      <span>📍 ピンをドラッグして位置を調整</span>
+      <button id="pin-move-save" onclick="window.savePinMove()">✅ 保存</button>
+      <button id="pin-move-cancel" onclick="cancelPinMove()">キャンセル</button>
+    </div>
+  </div>
+
+  <!-- DETAIL PANEL -->
+  <div id="detail-panel">
+    <div id="detail-header" class="managed">
+      <div>
+        <div id="detail-title">—</div>
+        <div id="detail-category">—</div>
+      </div>
+      <button id="detail-close" onclick="closeDetail()">✕</button>
+    </div>
+    <!-- 常時表示アクションバー -->
+    <div id="detail-action-bar">
+      <button class="dab-btn" id="dab-edit">✏️ 編集</button>
+      <button class="dab-btn pin" id="dab-pin">📍 ピン修正</button>
+      <button class="dab-btn sv" id="dab-sv">🚶 SV</button>
+      <button class="dab-btn drive" id="dab-drive" style="display:none">📁 資料</button>
+      <a class="dab-btn maps" id="dab-maps" target="_blank" style="text-decoration:none;text-align:center">🗺 地図</a>
+    </div>
+    <div id="detail-image-wrap">
+      <img id="detail-image" src="" alt="媒体画像">
+    </div>
+    <div id="detail-gallery">
+      <div class="gallery-title">📎 媒体資料</div>
+      <div class="gallery-grid" id="gallery-grid"></div>
+    </div>
+    <div id="detail-body"></div>
+  </div>
+</div>
+
+<!-- ── STREET VIEW MODAL ── -->
+<div id="sv-modal">
+  <div id="sv-header">
+    <span id="sv-title"></span>
+    <button id="sv-close-btn" onclick="window.closeStreetView()">✕ 閉じる</button>
+  </div>
+  <div id="sv-pano"></div>
+</div>
+
+<!-- ── FORM MODAL ── -->
+<div id="form-modal">
+  <div id="form-box">
+    <div id="form-header">
+      <span id="form-modal-title">新規媒体を追加</span>
+      <button id="form-close-btn" onclick="closeForm()">✕</button>
+    </div>
+    <div id="form-body">
+      <!-- ドロップゾーン -->
+      <div id="form-dropzone"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="event.preventDefault();this.classList.remove('drag-over');handleFileDrop(event.dataTransfer.files[0])"
+           onclick="document.getElementById('form-file-input').click()">
+        <input type="file" id="form-file-input" accept=".xlsx,.xls,.pptx,.png,.jpg,.jpeg"
+               onchange="if(this.files[0])handleFileDrop(this.files[0])">
+        <div class="dz-icon">📂</div>
+        <div class="dz-text">Excel / PowerPoint をドロップ</div>
+        <div class="dz-sub">クリックでファイル選択 ・ .xlsx .pptx .png .jpg に対応</div>
+      </div>
+      <!-- 画像プレビュー -->
+      <div id="form-image-preview">
+        <div class="preview-title">📎 読み込んだ画像（クリックでサムネイルに設定）</div>
+        <div class="form-img-grid" id="form-img-grid"></div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title">基本情報</div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">媒体ID *</label>
+            <input type="text" id="form-id" class="form-input" placeholder="例: TB-200">
+          </div>
+          <div class="form-field">
+            <label class="form-label">カテゴリ *</label>
+            <select id="form-category" class="form-select">
+              <option value="管理中">管理中</option>
+              <option value="調査済み">調査済み</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">媒体名 *</label>
+            <input type="text" id="form-name" class="form-input" placeholder="例: TB-200（港区虎ノ門）">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">住所</label>
+            <input type="text" id="form-address" class="form-input" placeholder="例: 東京都港区虎ノ門1-2-3">
+          </div>
+          <button id="form-geocode-btn" onclick="geocodeAddress()">📍 住所から検索</button>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">緯度</label>
+            <input type="number" id="form-lat" class="form-input" placeholder="35.xxxxxx" step="0.000001">
+          </div>
+          <div class="form-field">
+            <label class="form-label">経度</label>
+            <input type="number" id="form-lng" class="form-input" placeholder="139.xxxxxx" step="0.000001">
+          </div>
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title">媒体仕様</div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">形式</label>
+            <input type="text" id="form-format" class="form-input" placeholder="壁面 / 野立て / 屋上">
+          </div>
+          <div class="form-field">
+            <label class="form-label">面数</label>
+            <input type="text" id="form-faces" class="form-input" placeholder="片面 / 両面">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">サイズ</label>
+            <input type="text" id="form-size" class="form-input" placeholder="H2000×W3000">
+          </div>
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title">料金</div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">年間媒体料（円）</label>
+            <input type="number" id="form-annual_fee" class="form-input" placeholder="600000">
+          </div>
+          <div class="form-field">
+            <label class="form-label">製作費（円）</label>
+            <input type="number" id="form-production_fee" class="form-input" placeholder="200000">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">その他費用</label>
+            <input type="text" id="form-other_fees" class="form-input" placeholder="原状回復費：¥100,000">
+          </div>
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title">管理情報</div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">担当者</label>
+            <input type="text" id="form-manager" class="form-input" placeholder="氏名">
+          </div>
+          <div class="form-field">
+            <label class="form-label">調査日</label>
+            <input type="date" id="form-survey_date" class="form-input">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">備考</label>
+            <textarea id="form-notes" class="form-input"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title">リンク・画像</div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">Google DriveリンクURL</label>
+            <input type="url" id="form-drive_link" class="form-input" placeholder="https://drive.google.com/...">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">サムネイル画像URL</label>
+            <input type="url" id="form-thumbnail" class="form-input" placeholder="https://drive.google.com/uc?export=view&id=...">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="form-footer">
+      <button id="form-delete-btn">🗑 削除</button>
+      <button id="form-save-btn">保存する</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDy0rxUApFiMMr3p1Ci7npugfjVH_yd4Ds&libraries=geometry&language=ja"></script>
+<script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="media_data.js?v=20260423"></script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, writeBatch } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+/* ================================================================
+   FIREBASE CONFIG
+   ================================================================ */
+const firebaseConfig = {
+  apiKey:            "AIzaSyCAyBtvVrtiVrZZL358Ae42SvPiUnbL5sE",
+  authDomain:        "taiyo-media-map.firebaseapp.com",
+  projectId:         "taiyo-media-map",
+  storageBucket:     "taiyo-media-map.firebasestorage.app",
+  messagingSenderId: "1004930903651",
+  appId:             "1:1004930903651:web:a4a51091607f7b9e505256"
+};
+const APP_PASSWORD = 'taiyo9931';
+
+const fbApp = initializeApp(firebaseConfig);
+const db    = getFirestore(fbApp);
+const mediaCol  = collection(db, 'media');
+const imagesCol = collection(db, 'media_images');
+
+/* ================================================================
+   ★ 設定（旧URL系は未使用）
+   ================================================================ */
+const APPS_SCRIPT_URL = '';
+const SHEET_CSV_URL   = '';
+
+/* ================================================================
+   MAP SETUP
+   ================================================================ */
+const map = new google.maps.Map(document.getElementById('map'), {
+  center: { lat: 35.68, lng: 139.76 },
+  zoom: 10,
+  mapTypeControl: false,
+  streetViewControl: false,
+  fullscreenControl: false,
+  gestureHandling: 'greedy',
+  zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }
+});
+
+const cluster = new markerClusterer.MarkerClusterer({
+  map,
+  renderer: {
+    render({ count, position }) {
+      const sz = count < 10 ? 36 : count < 100 ? 42 : 48;
+      const svg = encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}"><circle cx="${sz/2}" cy="${sz/2}" r="${sz/2}" fill="#1a3a6b" opacity="0.88"/><text x="50%" y="50%" dy="0.35em" text-anchor="middle" fill="white" font-size="${sz<40?12:13}px" font-weight="700" font-family="Arial,sans-serif">${count}</text></svg>`);
+      return new google.maps.Marker({
+        position,
+        icon: { url: `data:image/svg+xml;charset=UTF-8,${svg}`, scaledSize: new google.maps.Size(sz, sz), anchor: new google.maps.Point(sz/2, sz/2) },
+        zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count
+      });
+    }
+  }
+});
+
+/* ================================================================
+   MARKER ICONS
+   ================================================================ */
+function makeIcon(category, active=false) {
+  const c = category === '管理中' ? '#1a73e8' : '#ea4335';
+  const scale = active ? 1.3 : 1;
+  const w = Math.round(24*scale), h = Math.round(34*scale);
+  const shadow = active ? `filter:drop-shadow(0 0 6px ${c});` : '';
+  const svg = encodeURIComponent(`<svg width="${w}" height="${h}" viewBox="0 0 24 34" xmlns="http://www.w3.org/2000/svg" style="${shadow}"><path d="M12 0C5.4 0 0 5.4 0 12c0 7.5 12 22 12 22S24 19.5 24 12C24 5.4 18.6 0 12 0z" fill="${c}"/><path d="M12 1.5C6.2 1.5 1.5 6.2 1.5 12c0 6.8 10.5 19.5 10.5 19.5S22.5 18.8 22.5 12C22.5 6.2 17.8 1.5 12 1.5z" fill="white" opacity="0.2"/><circle cx="12" cy="12" r="5.5" fill="white"/><circle cx="12" cy="12" r="4" fill="${c}" opacity="0.3"/></svg>`);
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${svg}`,
+    scaledSize: new google.maps.Size(w, h),
+    anchor: new google.maps.Point(Math.round(12*scale), h)
+  };
+}
+
+/* ================================================================
+   STATE
+   ================================================================ */
+let allMarkers = {};
+let filteredData = [];
+let catFilter = 'all';
+let activeItem = null;
+let sidebarCollapsed = false;
+
+/* ================================================================
+   INIT
+   ================================================================ */
+function init(data) {
+  // Build markers
+  data.forEach(item => {
+    if (!item.lat || !item.lng) return;
+    const m = new google.maps.Marker({ position: { lat: item.lat, lng: item.lng }, icon: makeIcon(item.category) });
+    m.addListener('click', () => { showDetail(item); focusMarker(item); });
+    allMarkers[item.id] = m;
+  });
+
+  // Populate selects
+  const managers = [...new Set(data.map(d=>d.manager).filter(Boolean))].sort();
+  managers.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = v;
+    document.getElementById('sel-manager').appendChild(o);
+  });
+
+  const areas = [...new Set(data.map(d => {
+    const m = (d.address || '').match(/^(.+?[都道府県])/);
+    return m ? m[1] : null;
+  }).filter(Boolean))].sort();
+  areas.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = v;
+    document.getElementById('sel-area').appendChild(o);
+  });
+
+  updateBadges(data);
+  applyFilters();
+  initMapDrop();
+}
+
+/* ================================================================
+   FILTERS
+   ================================================================ */
+function setCat(btn, cat) {
+  catFilter = cat;
+  document.querySelectorAll('.filter-btn[data-cat]').forEach(b => {
+    b.classList.remove('active', 'active-red');
+  });
+  btn.classList.add(cat === '調査済み' ? 'active-red' : 'active');
+  applyFilters();
+}
+
+function applyFilters() {
+  const q = document.getElementById('search-box').value.toLowerCase().trim();
+  const mgr = document.getElementById('sel-manager').value;
+  const area = document.getElementById('sel-area').value;
+
+  filteredData = liveData.filter(item => {
+    if (catFilter !== 'all' && item.category !== catFilter) return false;
+    if (mgr && item.manager !== mgr) return false;
+    const addr = item.address || '';
+    if (area && !addr.startsWith(area)) return false;
+    if (q && !(item.name||'').toLowerCase().includes(q) && !addr.toLowerCase().includes(q) && !(item.id||'').toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  renderList();
+  renderMarkers();
+
+  const cnt = filteredData.length;
+  document.getElementById('result-count').textContent = `${cnt}件表示`;
+  document.getElementById('no-results').style.display = cnt === 0 ? 'block' : 'none';
+
+  // 検索クエリがある場合、マップをその範囲に移動
+  if (q) {
+    const withCoords = filteredData.filter(d => d.lat && d.lng);
+    if (withCoords.length > 0) {
+      const bounds = new google.maps.LatLngBounds();
+      withCoords.forEach(d => bounds.extend({ lat: d.lat, lng: d.lng }));
+      map.fitBounds(bounds, 80);
+    } else {
+      // データがない場合はジオコーダーで場所を検索して移動
+      new google.maps.Geocoder().geocode({ address: q, region: 'JP' }, (results, status) => {
+        if (status === 'OK' && results[0]) {
+          map.setCenter(results[0].geometry.location);
+          map.setZoom(13);
+        }
+      });
+    }
+  }
+}
+
+/* ================================================================
+   RENDER LIST
+   ================================================================ */
+function renderList() {
+  const list = document.getElementById('media-list');
+  list.innerHTML = '';
+
+  filteredData.forEach(item => {
+    const div = document.createElement('div');
+    div.className = `media-item${activeItem?.id === item.id ? ' active' : ''}`;
+    div.dataset.id = item.id;
+    div.onclick = () => { showDetail(item); focusMarker(item); };
+
+    const dot = item.category === '管理中' ? 'dot-managed' : 'dot-surveyed';
+    const fee = item.annual_fee ? `<span class="item-price">¥${item.annual_fee.toLocaleString()}/年</span>` : '';
+    const sz = item.size && item.size !== '—' ? ` · ${item.size}` : '';
+
+    div.innerHTML = `
+      <div class="item-dot ${dot}"></div>
+      <div class="item-content">
+        <div class="item-name">${item.name}</div>
+        <div class="item-address">${item.address}</div>
+        <div class="item-meta">${item.format||'—'}${sz} ${fee}</div>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+/* ================================================================
+   RENDER MARKERS
+   ================================================================ */
+function renderMarkers() {
+  cluster.clearMarkers();
+  const markers = filteredData.filter(item => allMarkers[item.id]).map(item => allMarkers[item.id]);
+  cluster.addMarkers(markers);
+}
+
+/* ================================================================
+   DETAIL PANEL
+   ================================================================ */
+function fmt(v) { return v && v !== '' ? v : '—'; }
+function price(v) { return v && v > 0 ? `¥${Number(v).toLocaleString()}` : '—'; }
+
+function showDetail(item) {
+  activeItem = item;
+
+  // Update list active state
+  document.querySelectorAll('.media-item').forEach(el =>
+    el.classList.toggle('active', el.dataset.id === item.id)
+  );
+
+  // Update marker icons
+  Object.keys(allMarkers).forEach(id => {
+    const m = allMarkers[id];
+    const d = liveData.find(x => x.id === id);
+    if (d) m.setIcon(makeIcon(d.category, id === item.id));
+  });
+
+  // Header
+  const hdr = document.getElementById('detail-header');
+  hdr.className = item.category === '管理中' ? 'managed' : 'surveyed';
+  document.getElementById('detail-title').textContent = item.name;
+  document.getElementById('detail-category').textContent =
+    item.category === '管理中' ? '🔵 管理中媒体' : '🔴 調査済み未成約';
+
+  // Thumbnail
+  const imgWrap = document.getElementById('detail-image-wrap');
+  const img = document.getElementById('detail-image');
+  if (item.thumbnail) {
+    img.src = item.thumbnail;
+    img.onerror = () => { imgWrap.style.display = 'none'; };
+    imgWrap.style.display = 'block';
+  } else {
+    imgWrap.style.display = 'none';
+  }
+
+  // アクションバーをバインド（常時表示ボタン）
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}`;
+  document.getElementById('dab-edit').onclick = () => openFormEdit(liveData.find(x => x.id === item.id));
+  document.getElementById('dab-pin').onclick  = () => startPinMove(liveData.find(x => x.id === item.id));
+  document.getElementById('dab-sv').onclick   = () => openStreetView(liveData.find(x => x.id === item.id));
+  const dabDrive = document.getElementById('dab-drive');
+  if (item.drive_link) {
+    dabDrive.style.display = '';
+    dabDrive.onclick = () => window.open(item.drive_link, '_blank');
+  } else {
+    dabDrive.style.display = 'none';
+  }
+  document.getElementById('dab-maps').href = mapsUrl;
+
+  // Body（情報のみ・操作ボタンはアクションバーに移動）
+  document.getElementById('detail-body').innerHTML = `
+    <div class="detail-section">
+      <div class="detail-section-title">基本情報</div>
+      <div class="detail-row"><span class="detail-label">媒体ID</span><span class="detail-value">${fmt(item.id)}</span></div>
+      <div class="detail-row"><span class="detail-label">住所</span><span class="detail-value">${fmt(item.address)}</span></div>
+      <div class="detail-row"><span class="detail-label">形式</span><span class="detail-value">${fmt(item.format)}</span></div>
+      <div class="detail-row"><span class="detail-label">サイズ</span><span class="detail-value">${fmt(item.size)}</span></div>
+      <div class="detail-row"><span class="detail-label">面数</span><span class="detail-value">${fmt(item.faces)}</span></div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">料金</div>
+      <div class="detail-row"><span class="detail-label">年間媒体料</span><span class="detail-value price">${price(item.annual_fee)}</span></div>
+      <div class="detail-row"><span class="detail-label">月額</span><span class="detail-value">${item.annual_fee ? '¥'+Math.round(item.annual_fee/12).toLocaleString() : '—'}</span></div>
+      <div class="detail-row"><span class="detail-label">製作費</span><span class="detail-value">${price(item.production_fee)}</span></div>
+      <div class="detail-row"><span class="detail-label">その他</span><span class="detail-value">${fmt(item.other_fees)}</span></div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">管理情報</div>
+      <div class="detail-row"><span class="detail-label">担当者</span><span class="detail-value">${fmt(item.manager)}</span></div>
+      <div class="detail-row"><span class="detail-label">調査日</span><span class="detail-value">${fmt(item.survey_date)}</span></div>
+      ${item.notes ? `<div class="detail-row"><span class="detail-label">備考</span><span class="detail-value notes">${item.notes}</span></div>` : ''}
+    </div>`;
+
+  document.getElementById('detail-panel').classList.add('open');
+  if (window.innerWidth <= 768) closeMobileSidebar();
+  loadAndShowImages(item.id);
+}
+
+function closeDetail() {
+  activeItem = null;
+  document.getElementById('detail-panel').classList.remove('open');
+  document.querySelectorAll('.media-item').forEach(el => el.classList.remove('active'));
+  Object.keys(allMarkers).forEach(id => {
+    const d = liveData.find(x => x.id === id);
+    if (d) allMarkers[id].setIcon(makeIcon(d.category, false));
+  });
+}
+
+function focusMarker(item) {
+  if (item && item.lat && item.lng) {
+    map.setCenter({ lat: item.lat, lng: item.lng });
+    map.setZoom(15);
+  }
+}
+
+/* ================================================================
+   SIDEBAR TOGGLE
+   ================================================================ */
+function toggleSidebar() {
+  sidebarCollapsed = !sidebarCollapsed;
+  document.getElementById('sidebar').classList.toggle('collapsed', sidebarCollapsed);
+  const btn = document.getElementById('sidebar-toggle');
+  btn.textContent = sidebarCollapsed ? '▶' : '◀';
+  btn.style.left = sidebarCollapsed ? '0' : '320px';
+  btn.classList.toggle('collapsed', sidebarCollapsed);
+  setTimeout(() => google.maps.event.trigger(map, 'resize'), 320);
+}
+
+function toggleMobileSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('mobile-overlay');
+  sb.classList.toggle('mobile-open');
+  ov.style.display = sb.classList.contains('mobile-open') ? 'block' : 'none';
+}
+
+function closeMobileSidebar() {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('mobile-overlay').style.display = 'none';
+}
+
+/* ================================================================
+   BADGES
+   ================================================================ */
+function updateBadges(data) {
+  const managed = data.filter(d => d.category === '管理中').length;
+  const surveyed = data.filter(d => d.category === '調査済み').length;
+  document.getElementById('badge-managed').textContent = `管理中: ${managed}件`;
+  document.getElementById('badge-surveyed').textContent = `調査済み: ${surveyed}件`;
+}
+
+/* ================================================================
+   CSV パーサー（RFC 4180 準拠・改行・カンマ対応）
+   ================================================================ */
+function parseCSV(text) {
+  const rows = [];
+  let i = 0, row = [], field = '', inQuote = false;
+  while (i < text.length) {
+    const c = text[i];
+    if (inQuote) {
+      if (c === '"' && text[i+1] === '"') { field += '"'; i += 2; continue; }
+      if (c === '"') { inQuote = false; i++; continue; }
+      field += c;
+    } else {
+      if (c === '"') { inQuote = true; i++; continue; }
+      if (c === ',') { row.push(field); field = ''; i++; continue; }
+      if (c === '\r' && text[i+1] === '\n') { row.push(field); rows.push(row); row=[]; field=''; i+=2; continue; }
+      if (c === '\n') { row.push(field); rows.push(row); row=[]; field=''; i++; continue; }
+      field += c;
+    }
+    i++;
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function csvToData(text) {
+  const rows = parseCSV(text);
+  if (rows.length < 2) return [];
+  const h = rows[0].map(v => v.trim());
+  return rows.slice(1).filter(r => r.some(v => v.trim())).map(r => {
+    const get = k => { const i = h.indexOf(k); return i >= 0 ? (r[i]||'').trim() : ''; };
+    return {
+      id:             get('id'),
+      name:           get('name'),
+      category:       get('category'),
+      address:        get('address'),
+      lat:            parseFloat(get('lat')) || 0,
+      lng:            parseFloat(get('lng')) || 0,
+      format:         get('format'),
+      size:           get('size'),
+      faces:          get('faces'),
+      annual_fee:     parseInt(get('annual_fee').replace(/[^\d]/g,'')) || 0,
+      production_fee: parseInt(get('production_fee').replace(/[^\d]/g,'')) || 0,
+      other_fees:     get('other_fees'),
+      manager:        get('manager'),
+      survey_date:    get('survey_date'),
+      notes:          get('notes'),
+      drive_link:     get('drive_link'),
+      thumbnail:      get('thumbnail')
+    };
+  }).filter(d => d.id && d.lat && d.lng);
+}
+
+/* ================================================================
+   TOAST
+   ================================================================ */
+function showToast(msg, duration = 2800) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.opacity = '1';
+  clearTimeout(t._t);
+  t._t = setTimeout(() => { t.style.opacity = '0'; }, duration);
+}
+
+/* ================================================================
+   FIRESTORE — 画像ストレージ
+   ================================================================ */
+async function dbSave(mediaId, images) {
+  // 画像をJPEG圧縮（容量節約）して保存
+  const compressed = await Promise.all(images.map(async img => ({
+    filename: img.filename,
+    dataUrl: await compressImage(img.dataUrl)
+  })));
+  await setDoc(doc(imagesCol, mediaId), { images: compressed });
+}
+async function dbLoad(mediaId) {
+  try {
+    const snap = await getDoc(doc(imagesCol, mediaId));
+    return snap.exists() ? (snap.data().images || []) : [];
+  } catch(e) { return []; }
+}
+async function compressImage(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 600;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', 0.65));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/* ================================================================
+   IMAGE CONVERSION — PNG変換（最大1400px）
+   ================================================================ */
+async function convertToPNG(blob) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      const MAX = 1400;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      const du = c.toDataURL('image/png');
+      resolve(du.length > 500 ? du : null);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+async function makeThumb(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 400;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', 0.72));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/* ================================================================
+   FILE DROP HANDLER
+   ================================================================ */
+let _pendingImages = [];
+let _selectedThumbIdx = 0;
+
+async function handleFileDrop(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  showToast('📄 読み込んでいます…');
+  if (['xlsx','xls'].includes(ext))        await processExcel(file);
+  else if (ext === 'pptx')                 await processPPTX(file);
+  else if (['png','jpg','jpeg','gif','webp'].includes(ext)) await processImageFile(file);
+  else showToast('⚠️ 対応: .xlsx .pptx .png .jpg', 3500);
+}
+
+async function processImageFile(file) {
+  const png = await convertToPNG(file);
+  if (png) {
+    _pendingImages.push({filename: file.name, dataUrl: png});
+    updateFormImagePreview(_pendingImages);
+    showToast('🖼 画像を追加しました');
+  }
+}
+
+async function processExcel(file) {
+  try {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, {type: 'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: ''});
+
+    const cells = [];
+    rows.forEach((row, ri) => row.forEach((cell, ci) => {
+      const v = String(cell).trim();
+      if (v) cells.push({r: ri, c: ci, v});
+    }));
+
+    function near(labels) {
+      for (const {r, c, v} of cells) {
+        if (labels.some(l => v.includes(l))) {
+          const right = cells.find(x => x.r === r && x.c === c + 1);
+          if (right && right.v) return right.v;
+          const below = cells.find(x => x.r === r + 1 && x.c === c);
+          if (below && below.v) return below.v;
+          const m = v.match(/[：:]\s*(.+)/);
+          if (m) return m[1].trim();
+        }
+      }
+      return '';
+    }
+
+    const ex = {
+      name:        near(['媒体名','物件名','名称','件名']),
+      address:     near(['住所','所在地','場所']),
+      size:        near(['サイズ','寸法','規格','縦×横','H×W']),
+      format:      near(['形式','種別','媒体種類','掲出形式']),
+      faces:       near(['面数']),
+      other_fees:  near(['その他','撤去料','原状回復','諸費用']),
+      manager:     near(['担当者','担当','営業担当']),
+      notes:       near(['備考','特記','注記','メモ']),
+      survey_date: near(['調査日','調査年月日']),
+    };
+    const af = parseInt(near(['年間媒体料','年間料','媒体料','賃料','年間']).replace(/[^\d]/g,''));
+    const pf = parseInt(near(['製作費','制作費','工事費','施工費']).replace(/[^\d]/g,''));
+    if (af) ex.annual_fee = af;
+    if (pf) ex.production_fee = pf;
+
+    // 画像抽出
+    const images = [];
+    try {
+      const zip = await JSZip.loadAsync(data);
+      const keys = Object.keys(zip.files).filter(k => k.startsWith('xl/media/') && /\.(png|jpe?g|gif)$/i.test(k));
+      for (const key of keys.slice(0, 20)) {
+        const blob = await zip.files[key].async('blob');
+        const png = await convertToPNG(blob);
+        if (png) images.push({filename: key.split('/').pop(), dataUrl: png});
+      }
+    } catch(e) { console.warn('Excel画像抽出:', e); }
+
+    openForm(null);
+    fillFormFields(ex);
+    _pendingImages = images; _selectedThumbIdx = 0;
+    if (images.length) updateFormImagePreview(images);
+    showToast(`✅ Excel読み込み完了（${images.length}枚の画像）`);
+  } catch(e) { showToast('❌ Excel読み込み失敗: ' + e.message, 4000); }
+}
+
+async function processPPTX(file) {
+  try {
+    const data = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(data);
+
+    // スライドのテキスト抽出
+    const slideKeys = Object.keys(zip.files)
+      .filter(k => /^ppt\/slides\/slide\d+\.xml$/.test(k))
+      .sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
+
+    let allText = '';
+    for (const key of slideKeys) {
+      const xml = await zip.files[key].async('string');
+      const texts = [...xml.matchAll(/<a:t[^>]*>([^<]*)<\/a:t>/g)]
+        .map(m => m[1].trim()).filter(Boolean);
+      allText += texts.join('\n') + '\n---\n';
+    }
+
+    const lines = allText.split('\n').map(l => l.trim()).filter(Boolean);
+
+    function after(labels) {
+      for (let i = 0; i < lines.length; i++) {
+        if (labels.some(l => lines[i].includes(l))) {
+          const cm = lines[i].match(/[：:]\s*(.+)/);
+          if (cm && cm[1].trim()) return cm[1].trim();
+          if (lines[i+1] && !lines[i+1].includes('：')) return lines[i+1];
+        }
+      }
+      return '';
+    }
+
+    const ex = {
+      address:     after(['住所','所在地','場所','住　所']),
+      size:        after(['サイズ','寸法','規格','H×W','縦×横']),
+      format:      after(['形式','種別','媒体種類','掲出形式']),
+      faces:       after(['面数','面　数']),
+      other_fees:  after(['撤去料','原状回復','その他費用','解体費']),
+      survey_date: after(['調査日','調査年月日','撮影日']),
+      notes:       after(['備考','特記事項','注意事項']),
+      manager:     after(['担当者','担当','営業']),
+    };
+    ex.name = after(['媒体名','物件名','名称','件名']);
+    if (!ex.name) ex.name = lines.find(l => l.length >= 4 && !l.includes('：') && l !== '---') || '';
+    const af = parseInt(after(['年間媒体料','年間料','媒体料','賃料']).replace(/[^\d]/g,''));
+    const pf = parseInt(after(['製作費','制作費','施工費','工事費']).replace(/[^\d]/g,''));
+    if (af) ex.annual_fee = af;
+    if (pf) ex.production_fee = pf;
+
+    // 画像抽出（wmf/emfは除外）
+    const images = [];
+    const mediaKeys = Object.keys(zip.files)
+      .filter(k => k.startsWith('ppt/media/') && /\.(png|jpe?g|gif)$/i.test(k))
+      .sort();
+    for (const key of mediaKeys.slice(0, 25)) {
+      try {
+        const blob = await zip.files[key].async('blob');
+        const ext = key.split('.').pop().toLowerCase();
+        const mime = (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg' : 'image/png';
+        const typed = new Blob([blob], {type: mime});
+        const png = await convertToPNG(typed);
+        if (png && png.length > 5000) images.push({filename: key.split('/').pop(), dataUrl: png});
+      } catch(e) {}
+    }
+
+    openForm(null);
+    fillFormFields(ex);
+    _pendingImages = images; _selectedThumbIdx = 0;
+    if (images.length) updateFormImagePreview(images);
+    showToast(`✅ PowerPoint読み込み完了（${images.length}枚の画像）`);
+  } catch(e) { showToast('❌ PowerPoint読み込み失敗: ' + e.message, 4000); }
+}
+
+function fillFormFields(fields) {
+  Object.entries(fields).forEach(([k, v]) => {
+    const el = document.getElementById('form-' + k);
+    if (el && v !== undefined && v !== null && v !== 0 && String(v).trim() !== '') el.value = v;
+  });
+}
+
+function updateFormImagePreview(images) {
+  const wrap = document.getElementById('form-image-preview');
+  const grid = document.getElementById('form-img-grid');
+  if (!wrap || !grid) return;
+  if (!images || images.length === 0) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  grid.innerHTML = '';
+  images.forEach((img, i) => {
+    const div = document.createElement('div');
+    div.className = 'form-img-wrap' + (i === _selectedThumbIdx ? ' selected' : '');
+    div.innerHTML = `
+      <img src="${img.dataUrl}" alt="${img.filename}">
+      <button class="form-img-use" onclick="event.stopPropagation();setThumb(${i})">📌 使う</button>
+      <button class="form-img-del" onclick="event.stopPropagation();deleteImage(${i})" title="削除">✕</button>`;
+    div.onclick = () => setThumb(i);
+    grid.appendChild(div);
+  });
+}
+
+function setThumb(i) {
+  _selectedThumbIdx = i;
+  document.querySelectorAll('.form-img-wrap').forEach((el, idx) => el.classList.toggle('selected', idx === i));
+  showToast('📌 サムネイルに設定しました');
+}
+
+function deleteImage(i) {
+  _pendingImages.splice(i, 1);
+  // サムネイル選択インデックスを補正
+  if (_selectedThumbIdx >= _pendingImages.length) {
+    _selectedThumbIdx = Math.max(0, _pendingImages.length - 1);
+  }
+  updateFormImagePreview(_pendingImages);
+  showToast('🗑 画像を削除しました');
+}
+
+/* ================================================================
+   DETAIL GALLERY LOADER
+   ================================================================ */
+async function loadAndShowImages(mediaId) {
+  const images = await dbLoad(mediaId);
+  const gallery = document.getElementById('detail-gallery');
+  const grid = document.getElementById('gallery-grid');
+  if (!gallery || !grid) return;
+  grid.innerHTML = '';
+  if (!images.length) { gallery.style.display = 'none'; return; }
+  gallery.style.display = 'block';
+  images.forEach(img => {
+    const div = document.createElement('div');
+    div.className = 'gallery-item';
+    div.innerHTML = `<img src="${img.dataUrl}" alt="${img.filename}" loading="lazy">`;
+    div.onclick = () => openLightbox(img.dataUrl);
+    grid.appendChild(div);
+  });
+}
+
+function openLightbox(src) {
+  let lb = document.getElementById('lightbox');
+  if (!lb) {
+    lb = document.createElement('div');
+    lb.id = 'lightbox';
+    lb.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.94);z-index:99998;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+    lb.innerHTML = '<img style="max-width:93vw;max-height:93vh;border-radius:6px;box-shadow:0 8px 48px rgba(0,0,0,0.6)">';
+    lb.onclick = () => lb.style.display = 'none';
+    document.body.appendChild(lb);
+  }
+  lb.querySelector('img').src = src;
+  lb.style.display = 'flex';
+}
+
+/* ================================================================
+   DATA MANAGEMENT（Firestore）
+   ================================================================ */
+let liveData = [];
+let _unsubscribe = null;
+
+async function loadFromFirestore() {
+  showToast('📡 データを読み込んでいます…');
+  try {
+    const snap = await getDocs(mediaCol);
+    if (snap.empty) {
+      // 初回: MEDIA_DATAをFirestoreに一括登録
+      showToast('📤 初期データを登録中…（しばらくお待ちください）');
+      await seedFirestore();
+    } else {
+      liveData = snap.docs.map(d => d.data());
+    }
+  } catch(e) {
+    console.warn('Firestore読み込み失敗、ローカルデータを使用:', e);
+    liveData = [...MEDIA_DATA];
+  }
+}
+
+async function seedFirestore() {
+  const items = MEDIA_DATA;
+  const CHUNK = 400;
+  for (let i = 0; i < items.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    items.slice(i, i + CHUNK).forEach(item => {
+      batch.set(doc(mediaCol, item.id), item);
+    });
+    await batch.commit();
+    showToast(`📤 登録中… ${Math.min(i + CHUNK, items.length)}/${items.length}件`);
+  }
+  liveData = [...items];
+  showToast(`✅ ${items.length}件の初期データを登録しました`);
+}
+
+async function saveEdit(id, fields) {
+  try {
+    await setDoc(doc(mediaCol, id), fields, { merge: true });
+    const i = liveData.findIndex(x => x.id === id);
+    if (i >= 0) liveData[i] = {...liveData[i], ...fields};
+  } catch(e) { showToast('❌ 保存失敗: ' + e.message, 4000); }
+}
+
+async function addNewItem(item) {
+  try {
+    await setDoc(doc(mediaCol, item.id), item);
+    if (!liveData.find(x => x.id === item.id)) liveData.push(item);
+  } catch(e) { showToast('❌ 追加失敗: ' + e.message, 4000); }
+}
+
+function exportData() {
+  const js = 'const MEDIA_DATA = ' + JSON.stringify(liveData, null, 2) + ';\n';
+  const blob = new Blob([js], {type: 'text/javascript'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'media_data.js';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function setupRealtimeSync() {
+  if (_unsubscribe) _unsubscribe();
+  _unsubscribe = onSnapshot(mediaCol, snap => {
+    snap.docChanges().forEach(change => {
+      const item = change.doc.data();
+      if (change.type === 'added' || change.type === 'modified') {
+        const i = liveData.findIndex(x => x.id === item.id);
+        if (i >= 0) liveData[i] = item; else liveData.push(item);
+        if (allMarkers[item.id] && item.lat && item.lng) {
+          allMarkers[item.id].setPosition({ lat: item.lat, lng: item.lng });
+        }
+      } else if (change.type === 'removed') {
+        liveData = liveData.filter(x => x.id !== change.doc.id);
+        if (allMarkers[change.doc.id]) {
+          cluster.removeMarker(allMarkers[change.doc.id]);
+          delete allMarkers[change.doc.id];
+        }
+      }
+    });
+    updateBadges(liveData);
+    applyFilters();
+  }, err => console.warn('Firestoreリスナーエラー:', err));
+}
+
+/* ================================================================
+   PASSWORD AUTH
+   ================================================================ */
+function initAuth() {
+  // ローディング画面を即座に消す
+  const lo = document.getElementById('loading-overlay');
+  if (lo) lo.remove();
+
+  const saved = sessionStorage.getItem('taiyo_auth');
+  if (saved === APP_PASSWORD) {
+    startApp();
+  } else {
+    document.getElementById('signin-overlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('pw-input').focus(), 100);
+  }
+}
+
+window.checkPw = function() {
+  const val = document.getElementById('pw-input').value;
+  if (val === APP_PASSWORD) {
+    sessionStorage.setItem('taiyo_auth', APP_PASSWORD);
+    document.getElementById('signin-overlay').style.display = 'none';
+    startApp();
+  } else {
+    document.getElementById('pw-error').style.display = 'block';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-input').focus();
+  }
+};
+
+/* ================================================================
+   PIN MOVE MODE（ドラッグで微調整）
+   ================================================================ */
+let pinMoveMode = false;
+let pinMoveItem = null;
+let pinMoveOrigLat = 0;
+let pinMoveOrigLng = 0;
+
+function startPinMove(item) {
+  if (!item) return;
+  if (pinMoveMode) cancelPinMove();
+
+  const marker = allMarkers[item.id];
+  if (!marker) { showToast('⚠️ マーカーが見つかりません'); return; }
+
+  pinMoveMode = true;
+  pinMoveItem = item;
+  pinMoveOrigLat = item.lat;
+  pinMoveOrigLng = item.lng;
+
+  closeDetail();
+  map.setCenter({ lat: item.lat, lng: item.lng });
+  if (map.getZoom() < 17) map.setZoom(17);
+
+  cluster.removeMarker(marker, true);
+  marker.setMap(map);
+  marker.setDraggable(true);
+  marker.setIcon(makeIcon(item.category, true));
+
+  const hint = document.getElementById('pin-move-hint');
+  hint.style.display = 'flex';
+}
+
+window.savePinMove = async function() {
+  if (!pinMoveItem) return;
+  const marker = allMarkers[pinMoveItem.id];
+  if (!marker) { cancelPinMove(); return; }
+
+  const pos = marker.getPosition();
+  const lat = parseFloat(pos.lat().toFixed(6));
+  const lng = parseFloat(pos.lng().toFixed(6));
+
+  const live = liveData.find(x => x.id === pinMoveItem.id);
+  if (live) { live.lat = lat; live.lng = lng; }
+
+  marker.setDraggable(false);
+  marker.setIcon(makeIcon(pinMoveItem.category, false));
+  cluster.addMarker(marker);
+
+  await saveEdit(pinMoveItem.id, { lat, lng });
+
+  document.getElementById('pin-move-hint').style.display = 'none';
+  pinMoveMode = false;
+  showToast('📍 ピンの位置を保存しました');
+  showDetail(liveData.find(x => x.id === pinMoveItem.id));
+  pinMoveItem = null;
+};
+
+function cancelPinMove() {
+  if (pinMoveItem) {
+    const marker = allMarkers[pinMoveItem.id];
+    if (marker) {
+      marker.setDraggable(false);
+      marker.setPosition({ lat: pinMoveOrigLat, lng: pinMoveOrigLng });
+      marker.setIcon(makeIcon(pinMoveItem.category, false));
+      cluster.addMarker(marker);
+    }
+  }
+  pinMoveMode = false;
+  pinMoveItem = null;
+  document.getElementById('pin-move-hint').style.display = 'none';
+}
+
+/* ================================================================
+   STREET VIEW
+   ================================================================ */
+function openStreetView(item) {
+  if (!item || !item.lat || !item.lng) { showToast('⚠️ 位置情報がありません'); return; }
+  const modal = document.getElementById('sv-modal');
+  document.getElementById('sv-title').textContent = '🚶 ' + item.name;
+  modal.style.display = 'flex';
+
+  const panoEl = document.getElementById('sv-pano');
+  panoEl.innerHTML = '';
+
+  new google.maps.StreetViewService().getPanorama(
+    { location: { lat: item.lat, lng: item.lng }, radius: 150 },
+    (data, status) => {
+      if (status === 'OK') {
+        const heading = google.maps.geometry
+          ? google.maps.geometry.spherical.computeHeading(data.location.latLng, new google.maps.LatLng(item.lat, item.lng))
+          : 0;
+        new google.maps.StreetViewPanorama(panoEl, {
+          position: { lat: item.lat, lng: item.lng },
+          pov: { heading, pitch: 0 },
+          zoom: 1,
+          addressControl: false,
+          showRoadLabels: true,
+          motionTracking: false
+        });
+      } else {
+        panoEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-size:15px;flex-direction:column;gap:12px"><span style="font-size:40px">📷</span><span>このエリアのストリートビューは利用できません</span></div>';
+      }
+    }
+  );
+}
+
+window.closeStreetView = function() {
+  document.getElementById('sv-modal').style.display = 'none';
+  document.getElementById('sv-pano').innerHTML = '';
+};
+
+/* ================================================================
+   FORM MODAL
+   ================================================================ */
+function openFormAdd() { openForm(null); }
+function openFormEdit(item) { openForm(item); }
+
+function openForm(item) {
+  // 前回の画像をリセット
+  _pendingImages = []; _selectedThumbIdx = 0;
+  const preview = document.getElementById('form-image-preview');
+  if (preview) preview.style.display = 'none';
+  const grid = document.getElementById('form-img-grid');
+  if (grid) grid.innerHTML = '';
+
+  const isEdit = item !== null && item !== undefined;
+  document.getElementById('form-modal-title').textContent = isEdit ? '媒体を編集' : '新規媒体を追加';
+  // 編集時: 既存の画像を読み込む
+  if (isEdit) {
+    dbLoad(item.id).then(imgs => {
+      if (imgs.length) { _pendingImages = imgs; updateFormImagePreview(imgs); }
+    });
+  }
+  const fields = ['id','name','category','address','lat','lng','format','size','faces',
+    'annual_fee','production_fee','other_fees','manager','survey_date','notes','drive_link','thumbnail'];
+  fields.forEach(f => {
+    const el = document.getElementById('form-' + f);
+    if (!el) return;
+    el.value = (isEdit && item[f] !== undefined && item[f] !== null) ? item[f] : '';
+  });
+  const idEl = document.getElementById('form-id');
+  idEl.readOnly = isEdit;
+  idEl.style.background = isEdit ? '#f1f3f4' : '';
+  const delBtn = document.getElementById('form-delete-btn');
+  delBtn.style.display = isEdit ? 'block' : 'none';
+  if (isEdit) delBtn.onclick = () => deleteItem(item.id);
+  document.getElementById('form-save-btn').onclick = () => saveForm(isEdit ? item : null);
+  document.getElementById('form-modal').style.display = 'flex';
+}
+
+function closeForm() {
+  document.getElementById('form-modal').style.display = 'none';
+}
+
+async function geocodeAddress() {
+  const address = document.getElementById('form-address').value.trim();
+  if (!address) { alert('住所を入力してください'); return; }
+  const btn = document.getElementById('form-geocode-btn');
+  btn.textContent = '検索中...';
+  btn.disabled = true;
+  try {
+    const url = `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(address)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const [lng, lat] = data[0].geometry.coordinates;
+      document.getElementById('form-lat').value = parseFloat(lat.toFixed(6));
+      document.getElementById('form-lng').value = parseFloat(lng.toFixed(6));
+    } else {
+      alert('住所が見つかりませんでした。より詳しい住所で試してください。');
+    }
+  } catch(e) {
+    alert('通信エラー: ' + e.message);
+  } finally {
+    btn.textContent = '📍 住所から検索';
+    btn.disabled = false;
+  }
+}
+
+async function saveForm(existingItem) {
+  const id = document.getElementById('form-id').value.trim();
+  if (!id) { alert('媒体IDを入力してください'); return; }
+  if (!existingItem && liveData.find(x => x.id === id)) {
+    alert('この媒体IDは既に使用されています');
+    return;
+  }
+
+  // 画像がある場合、サムネを生成
+  let thumbUrl = document.getElementById('form-thumbnail').value.trim();
+  if (_pendingImages.length > 0 && !thumbUrl) {
+    const src = _pendingImages[_selectedThumbIdx]?.dataUrl || _pendingImages[0].dataUrl;
+    thumbUrl = await makeThumb(src);
+  }
+
+  const item = {
+    id,
+    name:           document.getElementById('form-name').value.trim(),
+    category:       document.getElementById('form-category').value,
+    address:        document.getElementById('form-address').value.trim(),
+    lat:            parseFloat(document.getElementById('form-lat').value) || 0,
+    lng:            parseFloat(document.getElementById('form-lng').value) || 0,
+    format:         document.getElementById('form-format').value.trim(),
+    size:           document.getElementById('form-size').value.trim(),
+    faces:          document.getElementById('form-faces').value.trim(),
+    annual_fee:     parseInt(String(document.getElementById('form-annual_fee').value).replace(/[^\d]/g,'')) || 0,
+    production_fee: parseInt(String(document.getElementById('form-production_fee').value).replace(/[^\d]/g,'')) || 0,
+    other_fees:     document.getElementById('form-other_fees').value.trim(),
+    manager:        document.getElementById('form-manager').value.trim(),
+    survey_date:    document.getElementById('form-survey_date').value.trim(),
+    notes:          document.getElementById('form-notes').value.trim(),
+    drive_link:     document.getElementById('form-drive_link').value.trim(),
+    thumbnail:      thumbUrl,
+  };
+  if (!item.lat || !item.lng) {
+    if (!confirm('緯度・経度が未入力です。「📍 住所から検索」で自動入力できます。\nこのまま保存しますか？（ピンは表示されません）')) return;
+  }
+  if (existingItem) {
+    saveEdit(id, item);
+    if (allMarkers[id] && item.lat && item.lng) allMarkers[id].setPosition({ lat: item.lat, lng: item.lng });
+  } else {
+    addNewItem(item);
+    if (item.lat && item.lng) {
+      const m = new google.maps.Marker({ position: { lat: item.lat, lng: item.lng }, icon: makeIcon(item.category) });
+      m.addListener('click', () => { const d = liveData.find(x => x.id === item.id); if(d) { showDetail(d); focusMarker(d); } });
+      allMarkers[item.id] = m;
+    }
+  }
+  // 画像をIndexedDBに保存
+  if (_pendingImages.length > 0) {
+    try {
+      await dbSave(id, _pendingImages);
+      showToast(`💾 ${_pendingImages.length}枚の画像を保存しました`);
+    } catch(e) { console.warn('画像保存失敗:', e); }
+    _pendingImages = []; _selectedThumbIdx = 0;
+  }
+  closeForm();
+  updateBadges(liveData);
+  applyFilters();
+  const saved = liveData.find(x => x.id === id);
+  if (saved && saved.lat && saved.lng) showDetail(saved);
+}
+
+async function deleteItem(id) {
+  if (!confirm(`この媒体を削除しますか？\nID: ${id}`)) return;
+  try {
+    await deleteDoc(doc(mediaCol, id));
+    try { await deleteDoc(doc(imagesCol, id)); } catch(e) {}
+    liveData = liveData.filter(x => x.id !== id);
+    if (allMarkers[id]) { cluster.removeMarker(allMarkers[id]); delete allMarkers[id]; }
+    showToast('🗑 削除しました');
+  } catch(e) { showToast('❌ 削除失敗: ' + e.message, 4000); }
+  closeForm();
+  closeDetail();
+  applyFilters();
+  updateBadges(liveData);
+}
+
+/* ================================================================
+   START
+   ================================================================ */
+async function startApp() {
+  const setStatus = msg => {
+    const el = document.getElementById('loading-status');
+    if (el) el.textContent = msg;
+  };
+  const hideLoading = () => {
+    const el = document.getElementById('loading-overlay');
+    if (!el) return;
+    el.classList.add('fade-out');
+    setTimeout(() => el.remove(), 500);
+  };
+  const setSourceBar = (connected) => {
+    const bar = document.getElementById('data-source-bar');
+    if (connected) {
+      bar.className = '';
+      document.getElementById('data-source-icon').textContent = '🟢';
+      document.getElementById('data-source-text').textContent = 'スプレッドシート連携中';
+      document.getElementById('data-updated').textContent =
+        '更新: ' + new Date().toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    } else {
+      bar.className = 'local';
+      document.getElementById('data-source-icon').textContent = '📂';
+      document.getElementById('data-source-text').textContent = 'ローカルデータ';
+    }
+  };
+
+  // ── 優先順位1: Apps Script JSON ──────────────────
+  if (APPS_SCRIPT_URL) {
+    setStatus('スプレッドシートからデータを取得中…');
+    try {
+      const res = await fetch(APPS_SCRIPT_URL);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) throw new Error('データが0件');
+      setStatus(`${data.length}件を読み込みました`);
+      setSourceBar(true);
+      hideLoading();
+      init(data);
+      return;
+    } catch(e) {
+      console.warn('Apps Script接続失敗 →', e.message);
+    }
+  }
+
+  // ── 優先順位2: CSV（公開設定済みの場合） ─────────
+  if (SHEET_CSV_URL) {
+    setStatus('CSVデータを取得中…');
+    try {
+      const res = await fetch(SHEET_CSV_URL);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = csvToData(await res.text());
+      if (data.length === 0) throw new Error('データが0件');
+      setStatus(`${data.length}件を読み込みました`);
+      setSourceBar(true);
+      hideLoading();
+      init(data);
+      return;
+    } catch(e) {
+      console.warn('CSV取得失敗 →', e.message);
+    }
+  }
+
+  // Firestoreから読み込み（初回はMEDIA_DATAをシード）
+  setStatus('データを同期中…');
+  await loadFromFirestore();
+  setSourceBar(true);
+  hideLoading();
+  init(liveData);
+  setupRealtimeSync();
+}
+
+/* ================================================================
+   MAP DRAG-DROP INIT
+   ================================================================ */
+function initMapDrop() {
+  const mapEl = document.getElementById('map');
+  mapEl.addEventListener('dragover', e => {
+    e.preventDefault(); e.stopPropagation();
+    document.getElementById('map-drop-overlay').style.display = 'flex';
+  }, false);
+  mapEl.addEventListener('dragleave', e => {
+    if (!mapEl.contains(e.relatedTarget))
+      document.getElementById('map-drop-overlay').style.display = 'none';
+  }, false);
+  mapEl.addEventListener('drop', async e => {
+    e.preventDefault(); e.stopPropagation();
+    document.getElementById('map-drop-overlay').style.display = 'none';
+    if (e.dataTransfer.files[0]) await handleFileDrop(e.dataTransfer.files[0]);
+  }, false);
+}
+
+/* ================================================================
+   WINDOW公開（HTML onclickハンドラ用）
+   ================================================================ */
+window.setCat           = setCat;
+window.applyFilters     = applyFilters;
+window.closeDetail      = closeDetail;
+window.toggleSidebar    = toggleSidebar;
+window.toggleMobileSidebar = toggleMobileSidebar;
+window.closeMobileSidebar  = closeMobileSidebar;
+window.openFormAdd      = openFormAdd;
+window.openFormEdit     = openFormEdit;
+window.closeForm        = closeForm;
+window.geocodeAddress   = geocodeAddress;
+window.cancelPinMove    = cancelPinMove;
+window.openStreetView   = openStreetView;
+window.handleFileDrop   = handleFileDrop;
+window.deleteImage      = deleteImage;
+window.setThumb         = setThumb;
+window.exportData       = exportData;
+window.liveData         = liveData;  // detail panel inline onclick用
+
+initAuth();
+</script>
+</body>
+</html>
