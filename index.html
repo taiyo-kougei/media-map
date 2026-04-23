@@ -577,6 +577,40 @@
       font-size: 12px;
     }
 
+    /* ── Map Crosshair ───────────────────────── */
+    #map-crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60px; height: 60px;
+      z-index: 700;
+      display: none;
+      pointer-events: none;
+    }
+    .ch-v {
+      position: absolute;
+      left: 50%; top: 0;
+      transform: translateX(-50%);
+      width: 2px; height: 100%;
+      background: rgba(220,53,69,0.85);
+    }
+    .ch-h {
+      position: absolute;
+      top: 50%; left: 0;
+      transform: translateY(-50%);
+      height: 2px; width: 100%;
+      background: rgba(220,53,69,0.85);
+    }
+    .ch-dot {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #dc3545;
+      box-shadow: 0 0 0 3px white, 0 0 0 5px rgba(220,53,69,0.5);
+    }
+
     /* ── Street View modal ───────────────────── */
     #sv-modal {
       position: fixed; inset: 0;
@@ -1006,9 +1040,14 @@
       <div class="drop-sub">Excel / PowerPoint → 自動読み込み＋フォームを開く</div>
     </div>
     <div id="pin-move-hint">
-      <span>📍 ピンをドラッグして位置を調整</span>
+      <span>🎯 マップをスクロールして位置を合わせて保存</span>
       <button id="pin-move-save" onclick="window.savePinMove()">✅ 保存</button>
       <button id="pin-move-cancel" onclick="cancelPinMove()">キャンセル</button>
+    </div>
+    <div id="map-crosshair">
+      <div class="ch-v"></div>
+      <div class="ch-h"></div>
+      <div class="ch-dot"></div>
     </div>
   </div>
 
@@ -2035,7 +2074,6 @@ let pinMoveMode = false;
 let pinMoveItem = null;
 let pinMoveOrigLat = 0;
 let pinMoveOrigLng = 0;
-let pinMoveTempMarker = null;
 
 function startPinMove(item) {
   if (!item) return;
@@ -2050,69 +2088,42 @@ function startPinMove(item) {
   map.setCenter({ lat: item.lat, lng: item.lng });
   map.setZoom(18);
 
-  google.maps.event.addListenerOnce(map, 'idle', () => {
-    // 元マーカーを非表示
-    const orig = allMarkers[item.id];
-    if (orig) { cluster.removeMarker(orig, true); orig.setMap(null); }
-
-    // ドラッグ専用の一時マーカーを新規作成
-    pinMoveTempMarker = new google.maps.Marker({
-      position: { lat: item.lat, lng: item.lng },
-      map,
-      draggable: true,
-      icon: makeIcon(item.category, true),
-      zIndex: 9999
-    });
-
-    document.getElementById('pin-move-hint').style.display = 'flex';
-  });
+  document.getElementById('map-crosshair').style.display = 'block';
+  document.getElementById('pin-move-hint').style.display = 'flex';
 }
 
 window.savePinMove = async function() {
-  if (!pinMoveItem || !pinMoveTempMarker) return;
+  if (!pinMoveItem) return;
 
-  const pos = pinMoveTempMarker.getPosition();
-  const lat = parseFloat(pos.lat().toFixed(6));
-  const lng = parseFloat(pos.lng().toFixed(6));
+  const center = map.getCenter();
+  const lat = parseFloat(center.lat().toFixed(6));
+  const lng = parseFloat(center.lng().toFixed(6));
 
-  // 一時マーカーを削除
-  pinMoveTempMarker.setMap(null);
-  pinMoveTempMarker = null;
-
-  // 元マーカーを新位置でクラスターに戻す
   const orig = allMarkers[pinMoveItem.id];
   if (orig) {
     orig.setPosition({ lat, lng });
     orig.setIcon(makeIcon(pinMoveItem.category, false));
-    cluster.addMarker(orig);
   }
 
   const live = liveData.find(x => x.id === pinMoveItem.id);
   if (live) { live.lat = lat; live.lng = lng; }
   await saveEdit(pinMoveItem.id, { lat, lng });
 
+  document.getElementById('map-crosshair').style.display = 'none';
   document.getElementById('pin-move-hint').style.display = 'none';
   pinMoveMode = false;
   showToast('📍 ピンの位置を保存しました');
   const saved = liveData.find(x => x.id === pinMoveItem.id);
   pinMoveItem = null;
+  applyFilters();
   if (saved) showDetail(saved);
 };
 
 function cancelPinMove() {
-  if (pinMoveTempMarker) { pinMoveTempMarker.setMap(null); pinMoveTempMarker = null; }
-
-  if (pinMoveItem) {
-    const orig = allMarkers[pinMoveItem.id];
-    if (orig) {
-      orig.setPosition({ lat: pinMoveOrigLat, lng: pinMoveOrigLng });
-      orig.setIcon(makeIcon(pinMoveItem.category, false));
-      cluster.addMarker(orig);
-    }
-  }
+  document.getElementById('map-crosshair').style.display = 'none';
+  document.getElementById('pin-move-hint').style.display = 'none';
   pinMoveMode = false;
   pinMoveItem = null;
-  document.getElementById('pin-move-hint').style.display = 'none';
 }
 
 /* ================================================================
