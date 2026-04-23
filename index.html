@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>太陽巧芸社｜媒体マップ</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="favicon.png">
   <style>
     * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 
@@ -1040,17 +1042,6 @@
     </div>
   </div>
 
-  <!-- ピン修正UI（#mainの直下に配置してGoogleMapsに隠れないようにする） -->
-  <div id="pin-move-hint">
-    <span>🎯 マップをスクロールして位置を合わせて保存</span>
-    <button id="pin-move-save" onclick="window.savePinMove()">✅ 保存</button>
-    <button id="pin-move-cancel" onclick="cancelPinMove()">キャンセル</button>
-  </div>
-  <div id="map-crosshair">
-    <div class="ch-v"></div>
-    <div class="ch-h"></div>
-    <div class="ch-dot"></div>
-  </div>
 
   <!-- DETAIL PANEL -->
   <div id="detail-panel">
@@ -2069,67 +2060,96 @@ window.checkPw = function() {
 };
 
 /* ================================================================
-   PIN MOVE MODE（ドラッグで微調整）
+   PIN MOVE MODE（ドラッグ方式）
    ================================================================ */
 let pinMoveMode = false;
 let pinMoveItem = null;
-let pinMoveOrigLat = 0;
-let pinMoveOrigLng = 0;
+let pinMoveControlDiv = null;
+let pinMoveOrigLatLng = null;
 
 function startPinMove(item) {
-  if (!item) return;
+  if (!item || !item.lat || !item.lng) { showToast('⚠️ 位置情報がありません'); return; }
   if (pinMoveMode) cancelPinMove();
+
+  const marker = allMarkers[item.id];
+  if (!marker) { showToast('⚠️ マーカーが見つかりません'); return; }
 
   pinMoveMode = true;
   pinMoveItem = item;
-  pinMoveOrigLat = item.lat;
-  pinMoveOrigLng = item.lng;
+  pinMoveOrigLatLng = { lat: item.lat, lng: item.lng };
 
   closeDetail();
+
+  // クラスターから外して単独でマップに表示
+  cluster.removeMarker(marker, true);
+  marker.setMap(map);
+  marker.setDraggable(true);
+  marker.setIcon(makeIcon(item.category, true));
+  marker.setCursor('grab');
+
   map.setCenter({ lat: item.lat, lng: item.lng });
   map.setZoom(18);
 
-  // 十字線をマップ中央に fixed 配置
-  const rect = document.getElementById('map').getBoundingClientRect();
-  const ch = document.getElementById('map-crosshair');
-  ch.style.left = (rect.left + rect.width / 2) + 'px';
-  ch.style.top  = (rect.top  + rect.height / 2) + 'px';
-  ch.style.display = 'block';
-  document.getElementById('pin-move-hint').style.display = 'flex';
+  // ヒントバーをGoogle Maps公式コントロールとして表示
+  pinMoveControlDiv = document.createElement('div');
+  pinMoveControlDiv.style.cssText = 'margin-top:10px;user-select:none';
+  pinMoveControlDiv.innerHTML =
+    '<div style="background:rgba(15,42,94,0.95);color:white;padding:10px 18px;border-radius:24px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.5);display:flex;align-items:center;gap:12px">' +
+    '<span>📍 ピンをドラッグして正しい位置に移動してください</span>' +
+    '<button id="_pinSave" style="background:#34a853;border:none;color:white;padding:5px 14px;border-radius:12px;cursor:pointer;font-size:13px;font-weight:700">✅ 保存</button>' +
+    '<button id="_pinCancel" style="background:rgba(255,255,255,0.25);border:none;color:white;padding:5px 10px;border-radius:12px;cursor:pointer;font-size:13px">✕</button>' +
+    '</div>';
+  map.controls[google.maps.ControlPosition.TOP_CENTER].push(pinMoveControlDiv);
+  pinMoveControlDiv.querySelector('#_pinSave').onclick   = window.savePinMove;
+  pinMoveControlDiv.querySelector('#_pinCancel').onclick = cancelPinMove;
 }
 
 window.savePinMove = async function() {
   if (!pinMoveItem) return;
+  const marker = allMarkers[pinMoveItem.id];
+  if (!marker) return;
 
-  const center = map.getCenter();
-  const lat = parseFloat(center.lat().toFixed(6));
-  const lng = parseFloat(center.lng().toFixed(6));
-
-  const orig = allMarkers[pinMoveItem.id];
-  if (orig) {
-    orig.setPosition({ lat, lng });
-    orig.setIcon(makeIcon(pinMoveItem.category, false));
-  }
+  const pos = marker.getPosition();
+  const lat = parseFloat(pos.lat().toFixed(6));
+  const lng = parseFloat(pos.lng().toFixed(6));
 
   const live = liveData.find(x => x.id === pinMoveItem.id);
   if (live) { live.lat = lat; live.lng = lng; }
   await saveEdit(pinMoveItem.id, { lat, lng });
 
-  document.getElementById('map-crosshair').style.display = 'none';
-  document.getElementById('pin-move-hint').style.display = 'none';
-  pinMoveMode = false;
+  const savedId = pinMoveItem.id;
+  _pinMoveCleanup();
   showToast('📍 ピンの位置を保存しました');
-  const saved = liveData.find(x => x.id === pinMoveItem.id);
   pinMoveItem = null;
   applyFilters();
+  const saved = liveData.find(x => x.id === savedId);
   if (saved) showDetail(saved);
 };
 
 function cancelPinMove() {
-  document.getElementById('map-crosshair').style.display = 'none';
-  document.getElementById('pin-move-hint').style.display = 'none';
-  pinMoveMode = false;
+  if (pinMoveItem && allMarkers[pinMoveItem.id] && pinMoveOrigLatLng) {
+    allMarkers[pinMoveItem.id].setPosition(pinMoveOrigLatLng);
+  }
+  _pinMoveCleanup();
   pinMoveItem = null;
+}
+
+function _pinMoveCleanup() {
+  pinMoveMode = false;
+  if (pinMoveItem && allMarkers[pinMoveItem.id]) {
+    const marker = allMarkers[pinMoveItem.id];
+    marker.setDraggable(false);
+    marker.setCursor(null);
+    const d = liveData.find(x => x.id === pinMoveItem.id);
+    if (d) marker.setIcon(makeIcon(d.category, false));
+    marker.setMap(null);
+    cluster.addMarker(marker, true);
+  }
+  if (pinMoveControlDiv) {
+    map.controls[google.maps.ControlPosition.TOP_CENTER].clear();
+    pinMoveControlDiv = null;
+  }
+  pinMoveOrigLatLng = null;
 }
 
 /* ================================================================
