@@ -1398,6 +1398,7 @@ function renderList() {
    RENDER MARKERS
    ================================================================ */
 function renderMarkers() {
+  if (pinMoveMode) return;
   cluster.clearMarkers();
   const markers = filteredData.filter(item => allMarkers[item.id]).map(item => allMarkers[item.id]);
   cluster.addMarkers(markers);
@@ -2049,15 +2050,16 @@ function startPinMove(item) {
 
   closeDetail();
   map.setCenter({ lat: item.lat, lng: item.lng });
-  if (map.getZoom() < 17) map.setZoom(17);
+  map.setZoom(18);
 
-  cluster.removeMarker(marker, true);
-  marker.setMap(map);
-  marker.setDraggable(true);
-  marker.setIcon(makeIcon(item.category, true));
-
-  const hint = document.getElementById('pin-move-hint');
-  hint.style.display = 'flex';
+  // マップが安定してからドラッグ設定（クラスター再描画と競合しないよう）
+  google.maps.event.addListenerOnce(map, 'idle', () => {
+    cluster.removeMarker(marker, true);
+    marker.setMap(map);
+    marker.setDraggable(true);
+    marker.setIcon(makeIcon(item.category, true));
+    document.getElementById('pin-move-hint').style.display = 'flex';
+  });
 }
 
 window.savePinMove = async function() {
