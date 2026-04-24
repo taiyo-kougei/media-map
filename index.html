@@ -1234,7 +1234,6 @@
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://unpkg.com/tesseract.js@v4/dist/tesseract.min.js"></script>
 <script src="media_data.js?v=20260423"></script>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
@@ -1761,71 +1760,64 @@ async function processImageFile(file) {
   _pendingImages.push({filename: file.name, dataUrl: png});
   _selectedThumbIdx = _pendingImages.length - 1;
   updateFormImagePreview(_pendingImages);
-  showToast('🔍 OCR解析中… 初回は少し時間がかかります');
+  showToast('🔍 画像を解析中...');
 
   try {
-    // リサイズ（OCR用に縮小）
+    // リサイズ（API送信用）
     const img = new Image();
     img.src = png;
     await new Promise(r => { img.onload = r; });
-    const scale = Math.min(1, 1400 / img.width);
+    const scale = Math.min(1, 1200 / img.width);
     const cv = document.createElement('canvas');
     cv.width = Math.round(img.width * scale);
     cv.height = Math.round(img.height * scale);
     cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-    const resized = cv.toDataURL('image/png');
+    const b64 = cv.toDataURL('image/jpeg', 0.85).split(',')[1];
 
-    const { data: { text } } = await Tesseract.recognize(resized, 'jpn+eng', {
-      logger: () => {}
-    });
-
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
-    function after(labels) {
-      for (let i = 0; i < lines.length; i++) {
-        if (labels.some(l => lines[i].includes(l))) {
-          const cm = lines[i].match(/[：:]\s*(.+)/);
-          if (cm && cm[1].trim()) return cm[1].trim();
-          if (lines[i+1] && !lines[i+1].includes('：') && !lines[i+1].includes(':')) return lines[i+1];
-        }
+    const GEMINI_KEY = 'AIzaSyCAyBtvVrtiVrZZL358Ae42SvPiUnbL5sE';
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: 'image/jpeg', data: b64 } },
+              { text: `この媒体提案書の画像から以下の項目を抽出してJSONのみ返してください。値がなければ空文字。数字フィールドは数字のみ（カンマ・円記号・「各」不要）。
+{
+  "name": "ヘッダー中央に大きく書かれた媒体名（例：横浜エリア媒体No,2）",
+  "address": "掲出場所の住所（都道府県から）",
+  "format": "看板種類（例：壁面看板）",
+  "size": "サイズ（例：H3400×W3800）※「各」は除く",
+  "annual_fee": "媒体料金の数字のみ（例：4200000）",
+  "production_fee": "製作取付費の数字のみ（例：350000）",
+  "other_fees": "撤去費または原状回復費の数字のみ（例：200000）",
+  "notes": "備考の内容"
+}` }
+            ]
+          }],
+          generationConfig: { temperature: 0, maxOutputTokens: 512 }
+        })
       }
-      return '';
-    }
+    );
 
-    // 媒体名：ヘッダー行の「媒体提案書」と「Image」の間
-    let name = '';
-    const headerLine = lines.find(l => l.includes('媒体提案書'));
-    if (headerLine) {
-      const m = headerLine.match(/媒体提案書\s+(.+?)\s+(Image|image)/i);
-      if (m) name = m[1].trim();
-    }
-    if (!name) {
-      // 先頭付近でそれらしい行を探す
-      name = lines.slice(0, 6).find(l =>
-        !l.includes('媒体提案書') && !l.match(/^Image$/i) && l.length >= 4 && l.length <= 40
-      ) || '';
-    }
+    if (!resp.ok) throw new Error(`Gemini HTTP ${resp.status}`);
+    const result = await resp.json();
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('JSON not found in response');
 
-    const ex = {
-      name:    name,
-      address: after(['掲出場所', '住所', '所在地']),
-      format:  after(['看板種類', '媒体種類', '形式']),
-      size:    after(['Size', 'size', 'サイズ']),
-      notes:   after(['備考']),
-    };
-
-    const feeRaw = after(['媒体料金', '年間媒体料', '媒体料']);
-    if (feeRaw) { const n = feeRaw.match(/[\d,]+/); if (n) ex.annual_fee = parseInt(n[0].replace(/,/g,'')); }
-    const pfRaw = after(['製作取付費', '製作費', '取付費']);
-    if (pfRaw)  { const n = pfRaw.match(/[\d,]+/);  if (n) ex.production_fee = parseInt(n[0].replace(/,/g,'')); }
-    const ofRaw = after(['撤去費', '原状回復', '現状回復']);
-    if (ofRaw)  { const n = ofRaw.match(/[\d,]+/);  if (n) ex.other_fees = parseInt(n[0].replace(/,/g,'')); }
+    const ex = JSON.parse(m[0]);
+    if (ex.annual_fee)     ex.annual_fee     = parseInt(String(ex.annual_fee).replace(/[^\d]/g,'')) || '';
+    if (ex.production_fee) ex.production_fee = parseInt(String(ex.production_fee).replace(/[^\d]/g,'')) || '';
+    if (ex.other_fees)     ex.other_fees     = parseInt(String(ex.other_fees).replace(/[^\d]/g,'')) || '';
 
     fillFormFields(ex);
-    showToast('✅ 画像から情報を抽出しました');
+    showToast('✅ 画像から情報を自動入力しました');
   } catch(e) {
-    console.warn('OCR error:', e);
-    showToast('🖼 画像を追加しました（OCR失敗）');
+    console.warn('画像解析エラー:', e);
+    showToast('🖼 画像を追加しました（解析失敗: ' + e.message + '）', 4000);
   }
 }
 
