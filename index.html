@@ -1752,9 +1752,59 @@ async function handleFileDrop(file) {
 
 async function processImageFile(file) {
   const png = await convertToPNG(file);
-  if (png) {
-    _pendingImages.push({filename: file.name, dataUrl: png});
-    updateFormImagePreview(_pendingImages);
+  if (!png) return;
+
+  // フォームが閉じていれば開く
+  const modal = document.getElementById('form-modal');
+  if (!modal || modal.style.display === 'none' || modal.style.display === '') openForm(null);
+
+  _pendingImages.push({filename: file.name, dataUrl: png});
+  _selectedThumbIdx = _pendingImages.length - 1;
+  updateFormImagePreview(_pendingImages);
+  showToast('🔍 画像を解析中...');
+
+  try {
+    const b64 = png.split(',')[1];
+    const mediaType = png.startsWith('data:image/jpeg') ? 'image/jpeg' : 'image/png';
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': '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',
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 512,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
+            { type: 'text', text: 'この媒体提案書の画像から情報を抽出してJSONのみ返してください。\n{"name":"媒体名（ヘッダー中央の大きな文字）","address":"掲出場所の住所","format":"看板種類","size":"サイズ","annual_fee":"年間媒体料の数字のみ","production_fee":"製作取付費の数字のみ","other_fees":"撤去費または原状回復費の数字のみ","notes":"備考の内容"}' }
+          ]
+        }]
+      })
+    });
+    if (resp.ok) {
+      const result = await resp.json();
+      const text = result.content[0].text;
+      const m = text.match(/\{[\s\S]*\}/);
+      if (m) {
+        const ex = JSON.parse(m[0]);
+        if (ex.annual_fee)    ex.annual_fee    = parseInt(String(ex.annual_fee).replace(/[^\d]/g,'')) || '';
+        if (ex.production_fee) ex.production_fee = parseInt(String(ex.production_fee).replace(/[^\d]/g,'')) || '';
+        if (ex.other_fees)    ex.other_fees    = parseInt(String(ex.other_fees).replace(/[^\d]/g,'')) || '';
+        fillFormFields(ex);
+        showToast('✅ 画像から情報を抽出しました');
+      } else {
+        showToast('🖼 画像を追加しました');
+      }
+    } else {
+      showToast('🖼 画像を追加しました');
+    }
+  } catch(e) {
+    console.warn('OCR error:', e);
     showToast('🖼 画像を追加しました');
   }
 }
