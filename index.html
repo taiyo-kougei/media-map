@@ -2840,10 +2840,32 @@ async function saveForm(existingItem) {
 async function deleteItem(id) {
   if (!confirm(`この媒体を削除しますか？\nID: ${id}`)) return;
   try {
-    await deleteDoc(doc(mediaCol, id));
-    try { await deleteDoc(doc(imagesCol, id)); } catch(e) {}
-    liveData = liveData.filter(x => x.id !== id);
-    if (allMarkers[id]) { cluster.removeMarker(allMarkers[id]); delete allMarkers[id]; }
+    if (id && id !== 'undefined') {
+      // 通常削除
+      await deleteDoc(doc(mediaCol, id));
+      try { await deleteDoc(doc(imagesCol, id)); } catch(e) {}
+      liveData = liveData.filter(x => x.id !== id);
+      if (allMarkers[id]) { cluster.removeMarker(allMarkers[id]); delete allMarkers[id]; }
+    } else {
+      // id が undefined / "undefined" / 空 の場合 → Firestore全スキャンで該当ドキュメントを削除
+      const snap = await getDocs(mediaCol);
+      let deleted = 0;
+      for (const d of snap.docs) {
+        const data = d.data();
+        if (!data.id || data.id === 'undefined') {
+          await deleteDoc(d.ref);
+          try { await deleteDoc(doc(imagesCol, d.id)); } catch(e) {}
+          deleted++;
+        }
+      }
+      // メモリ上からも除去
+      liveData = liveData.filter(x => x.id && x.id !== 'undefined');
+      // マーカーからも除去
+      Object.keys(allMarkers).forEach(k => {
+        if (!k || k === 'undefined') { cluster.removeMarker(allMarkers[k]); delete allMarkers[k]; }
+      });
+      if (deleted === 0) throw new Error('対象ドキュメントが見つかりませんでした');
+    }
     showToast('🗑 削除しました');
   } catch(e) { showToast('❌ 削除失敗: ' + e.message, 4000); }
   closeForm();
