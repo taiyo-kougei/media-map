@@ -673,6 +673,20 @@
     .toolbar-btn:hover { background: #f1f3f4; border-color: #1a3a6b; color: #1a3a6b; }
     .toolbar-btn.primary { background: #1a3a6b; color: white; border-color: #1a3a6b; }
     .toolbar-btn.primary:hover { background: #0f2a5e; }
+    .toolbar-btn.active { background: #e8f0fe; border-color: #1a73e8; color: #1a73e8; }
+    .toolbar-btn.danger { background: #fce8e6; border-color: #ea4335; color: #ea4335; }
+    #area-select-banner {
+      display: none;
+      margin: 6px 12px 0;
+      padding: 7px 10px;
+      background: #e8f0fe;
+      border: 1.5px solid #1a73e8;
+      border-radius: 8px;
+      font-size: 11px;
+      color: #1a73e8;
+      font-weight: 600;
+      text-align: center;
+    }
 
     /* ── Form Modal ───────────────────────────── */
     #form-modal {
@@ -1029,9 +1043,12 @@
     <div id="result-count">読み込み中…</div>
     <div id="media-list"></div>
     <div id="no-results">該当する媒体がありません</div>
+    <div id="area-select-banner">⬜ ドラッグで範囲を描いてください</div>
     <div id="sidebar-toolbar">
       <button class="toolbar-btn primary" onclick="openFormAdd()">＋ 新規追加</button>
-      <button class="toolbar-btn" onclick="exportData()" title="変更をmedia_data.jsとしてダウンロード">⬇ エクスポート</button>
+      <button class="toolbar-btn" id="area-select-btn" onclick="toggleAreaSelect()" title="マップ上で矩形範囲を選択して絞り込む">⬜ エリア選択</button>
+      <button class="toolbar-btn danger" id="area-clear-btn" onclick="clearAreaSelect()" style="display:none" title="エリア選択を解除">✕ 解除</button>
+      <button class="toolbar-btn" onclick="exportCSV()" title="現在の絞り込み結果をCSV出力">📥 CSV</button>
     </div>
   </div>
 
@@ -1234,7 +1251,7 @@
   </div>
 </div>
 
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDy0rxUApFiMMr3p1Ci7npugfjVH_yd4Ds&libraries=geometry&language=ja"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDy0rxUApFiMMr3p1Ci7npugfjVH_yd4Ds&libraries=geometry,drawing&language=ja"></script>
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -1280,6 +1297,93 @@ const map = new google.maps.Map(document.getElementById('map'), {
   gestureHandling: 'greedy',
   zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }
 });
+
+/* ================================================================
+   AREA SELECTION (Rectangle Drawing)
+   ================================================================ */
+let drawingManager = null;
+let selectionRect  = null;
+let areaFilterBounds = null;
+
+{
+  drawingManager = new google.maps.drawing.DrawingManager({
+    drawingMode: null,
+    drawingControl: false,
+    rectangleOptions: {
+      strokeColor: '#1a73e8',
+      strokeWeight: 2,
+      fillColor: '#1a73e8',
+      fillOpacity: 0.08,
+      editable: false,
+      zIndex: 1,
+    }
+  });
+  drawingManager.setMap(map);
+
+  google.maps.event.addListener(drawingManager, 'rectanglecomplete', function(rect) {
+    if (selectionRect) selectionRect.setMap(null);
+    selectionRect = rect;
+    areaFilterBounds = rect.getBounds();
+    drawingManager.setDrawingMode(null);
+    map.setOptions({ draggable: true, scrollwheel: true });
+    const btn = document.getElementById('area-select-btn');
+    btn.classList.remove('active');
+    btn.textContent = '⬜ エリア選択';
+    document.getElementById('area-clear-btn').style.display = 'block';
+    document.getElementById('area-select-banner').style.display = 'none';
+    applyFilters();
+  });
+}
+
+function toggleAreaSelect() {
+  const btn = document.getElementById('area-select-btn');
+  if (drawingManager.getDrawingMode() === google.maps.drawing.OverlayType.RECTANGLE) {
+    drawingManager.setDrawingMode(null);
+    map.setOptions({ draggable: true, scrollwheel: true });
+    btn.classList.remove('active');
+    btn.textContent = '⬜ エリア選択';
+    document.getElementById('area-select-banner').style.display = 'none';
+  } else {
+    drawingManager.setDrawingMode(google.maps.drawing.OverlayType.RECTANGLE);
+    btn.classList.add('active');
+    btn.textContent = '描画中…';
+    document.getElementById('area-select-banner').style.display = 'block';
+  }
+}
+
+function clearAreaSelect() {
+  if (selectionRect) { selectionRect.setMap(null); selectionRect = null; }
+  areaFilterBounds = null;
+  drawingManager.setDrawingMode(null);
+  map.setOptions({ draggable: true, scrollwheel: true });
+  const btn = document.getElementById('area-select-btn');
+  btn.classList.remove('active');
+  btn.textContent = '⬜ エリア選択';
+  document.getElementById('area-clear-btn').style.display = 'none';
+  document.getElementById('area-select-banner').style.display = 'none';
+  applyFilters();
+}
+
+function exportCSV() {
+  if (!filteredData || filteredData.length === 0) { alert('エクスポートするデータがありません'); return; }
+  const headers = ['媒体ID','媒体名','カテゴリー','住所','担当者','看板種類','サイズ','年間媒体料','製作費','その他費用','調査日','備考'];
+  const rows = filteredData.map(item => [
+    item.id || '', item.name || '', item.category || '', item.address || '',
+    item.manager || '', item.format || '', item.size || '',
+    item.annual_fee || '', item.production_fee || '', item.other_fees || '',
+    item.survey_date || '', item.notes || ''
+  ]);
+  const csv = [headers, ...rows]
+    .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const dateStr = new Date().toLocaleDateString('ja-JP').replace(/\//g, '-');
+  a.download = `媒体リスト_${dateStr}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
 
 /* ── ピン修正 十字線をmap初期化後に動的追加 ── */
 google.maps.event.addListenerOnce(map, 'idle', function() {
@@ -1399,6 +1503,9 @@ function applyFilters() {
     const addr = item.address || '';
     if (area && !addr.startsWith(area)) return false;
     if (q && !(item.name||'').toLowerCase().includes(q) && !addr.toLowerCase().includes(q) && !(item.id||'').toLowerCase().includes(q)) return false;
+    if (areaFilterBounds && item.lat && item.lng) {
+      if (!areaFilterBounds.contains({ lat: item.lat, lng: item.lng })) return false;
+    }
     return true;
   });
 
@@ -1406,7 +1513,8 @@ function applyFilters() {
   renderMarkers();
 
   const cnt = filteredData.length;
-  document.getElementById('result-count').textContent = `${cnt}件表示`;
+  const areaLabel = areaFilterBounds ? `（エリア選択中：${cnt}件）` : `${cnt}件表示`;
+  document.getElementById('result-count').textContent = areaLabel;
   document.getElementById('no-results').style.display = cnt === 0 ? 'block' : 'none';
 
   // 検索クエリがある場合、マップをその範囲に移動
@@ -2748,6 +2856,9 @@ window.toggleSidebar    = toggleSidebar;
 window.toggleMobileSidebar = toggleMobileSidebar;
 window.closeMobileSidebar  = closeMobileSidebar;
 window.openFormAdd      = openFormAdd;
+window.toggleAreaSelect = toggleAreaSelect;
+window.clearAreaSelect  = clearAreaSelect;
+window.exportCSV        = exportCSV;
 window.openFormEdit     = openFormEdit;
 window.closeForm        = closeForm;
 window.geocodeAddress   = geocodeAddress;
