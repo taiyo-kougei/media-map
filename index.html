@@ -2568,6 +2568,10 @@ async function saveForm(existingItem) {
     alert('この媒体IDは既に使用されています');
     return;
   }
+  const category = document.getElementById('form-category').value;
+  if (!category) { alert('カテゴリーを選択してください'); document.getElementById('form-category').focus(); return; }
+  const address = document.getElementById('form-address').value.trim();
+  if (!address) { alert('住所を入力してください'); document.getElementById('form-address').focus(); return; }
 
   // 画像がある場合、サムネを生成
   let thumbUrl = document.getElementById('form-thumbnail').value.trim();
