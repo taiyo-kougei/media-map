@@ -1862,139 +1862,283 @@ async function processImageFile(file) {
   }
 }
 
-async function processExcel(file) {
-  try {
-    const data = await file.arrayBuffer();
-    const wb = XLSX.read(data, {type: 'array'});
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: ''});
-
-    const cells = [];
-    rows.forEach((row, ri) => row.forEach((cell, ci) => {
-      const v = String(cell).trim();
-      if (v) cells.push({r: ri, c: ci, v});
-    }));
-
-    function near(labels) {
-      for (const {r, c, v} of cells) {
-        if (labels.some(l => v.includes(l))) {
-          const right = cells.find(x => x.r === r && x.c === c + 1);
-          if (right && right.v) return right.v;
-          const below = cells.find(x => x.r === r + 1 && x.c === c);
-          if (below && below.v) return below.v;
-          const m = v.match(/[：:]\s*(.+)/);
-          if (m) return m[1].trim();
-        }
+/* ================================================================
+   共通：テキストから媒体フィールドを抽出
+   ================================================================ */
+function parseMediaFields(rawText) {
+  // ラベル：値 を正規表現で直接抽出（同一行複数フィールドに対応）
+  function pick(labels) {
+    for (const label of labels) {
+      const esc = label.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
+      // 同一行内: ラベル[：:]値（次のラベル：まで or 行末）
+      const re = new RegExp(esc + '[：:﹕]\\s*([^\\n：:]{1,80})', 'u');
+      const m = rawText.match(re);
+      if (m) {
+        let v = m[1].trim();
+        // 後続の「ラベル：」があれば除去（例: 壁面看板　Size：H2000 → 壁面看板）
+        v = v.replace(/\s+\S+[：:]\S*.*$/, '').trim();
+        if (v && v !== label) return v;
       }
-      return '';
     }
+    return '';
+  }
+  function numOf(s) { const m = (s||'').replace(/[¥￥,，]/g,'').match(/\d[\d,]*/); return m ? parseInt(m[0].replace(/,/g,'')) : null; }
 
-    const ex = {
-      name:        near(['媒体名','物件名','名称','件名']),
-      address:     near(['住所','所在地','場所']),
-      size:        near(['サイズ','寸法','規格','縦×横','H×W']),
-      format:      near(['形式','種別','媒体種類','掲出形式']),
-      faces:       near(['面数']),
-      other_fees:  near(['その他','撤去料','原状回復','諸費用']),
-      manager:     near(['担当者','担当','営業担当']),
-      notes:       near(['備考','特記','注記','メモ']),
-      survey_date: near(['調査日','調査年月日']),
-    };
-    const af = parseInt(near(['年間媒体料','年間料','媒体料','賃料','年間']).replace(/[^\d]/g,''));
-    const pf = parseInt(near(['製作費','制作費','工事費','施工費']).replace(/[^\d]/g,''));
-    if (af) ex.annual_fee = af;
-    if (pf) ex.production_fee = pf;
+  const SKIP_NAMES = ['媒体提案書','Image','TAIYOKOUGEISHA','Location','掲出場所','看板種類','Size','媒体料金'];
+  const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
 
-    // 画像抽出
-    const images = [];
-    try {
-      const zip = await JSZip.loadAsync(data);
-      const keys = Object.keys(zip.files).filter(k => k.startsWith('xl/media/') && /\.(png|jpe?g|gif)$/i.test(k));
-      for (const key of keys.slice(0, 20)) {
-        const blob = await zip.files[key].async('blob');
-        const png = await convertToPNG(blob);
-        if (png) images.push({filename: key.split('/').pop(), dataUrl: png});
-      }
-    } catch(e) { console.warn('Excel画像抽出:', e); }
+  // 媒体名: ラベル優先 → ヘッダーっぽい行を探す
+  let name = pick(['媒体名','物件名','名称','件名']);
+  if (!name) {
+    name = lines.find(l =>
+      l.length >= 4 && l.length <= 40 &&
+      !l.includes('：') && !l.includes(':') &&
+      !/^\d/.test(l) &&
+      !SKIP_NAMES.some(s => l.includes(s))
+    ) || '';
+  }
 
-    openForm(null);
-    fillFormFields(ex);
-    _pendingImages = images; _selectedThumbIdx = 0;
-    if (images.length) updateFormImagePreview(images);
-    showToast(`✅ Excel読み込み完了（${images.length}枚の画像）`);
-  } catch(e) { showToast('❌ Excel読み込み失敗: ' + e.message, 4000); }
+  const ex = {
+    name,
+    address:        pick(['掲出場所','住所','所在地','場所']),
+    format:         pick(['看板種類','媒体種類','形式','種別','掲出形式']),
+    size:           pick(['Size','サイズ','寸法','規格','H×W','縦×横']),
+    other_fees:     pick(['原状回復費','撤去費','撤去料','原状回復','解体費','その他費用']),
+    notes:          pick(['備考','特記事項','注意事項']),
+    manager:        pick(['担当者','担当']),
+    faces:          pick(['面数']),
+  };
+  if (ex.size) ex.size = ex.size.replace(/各\s*/g,'').trim();
+
+  const feeVal  = pick(['媒体料金','年間媒体料','年間料','賃料']);
+  const prodVal = pick(['製作取付費','製作\/取付費','製作\/取付','製作費','制作費','施工費','工事費']);
+  const af = numOf(feeVal);  if (af) ex.annual_fee = af;
+  const pf = numOf(prodVal); if (pf) ex.production_fee = pf;
+
+  return ex;
 }
 
+/* ================================================================
+   PPTX PROCESSOR - スライドごとにテキスト抽出、サムネ生成
+   ================================================================ */
 async function processPPTX(file) {
+  const LOG = {
+    fileType: 'pptx', slideCount: 0,
+    extractedRawText: '', detectedPrice: '', detectedSize: '',
+    detectedAddress: '', thumbnailPath: '', errorMessage: ''
+  };
   try {
     const data = await file.arrayBuffer();
-    const zip = await JSZip.loadAsync(data);
+    const zip  = await JSZip.loadAsync(data);
 
-    // スライドのテキスト抽出
+    // スライド一覧（番号順）
     const slideKeys = Object.keys(zip.files)
       .filter(k => /^ppt\/slides\/slide\d+\.xml$/.test(k))
-      .sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
+      .sort((a,b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
+    LOG.slideCount = slideKeys.length;
+    if (!slideKeys.length) throw new Error('スライドが見つかりません');
 
-    let allText = '';
+    // 全スライドのテキストを結合して抽出
+    let rawText = '';
     for (const key of slideKeys) {
       const xml = await zip.files[key].async('string');
+      // <a:t> タグから文字列を取り出しHTMLエンティティをデコード
       const texts = [...xml.matchAll(/<a:t[^>]*>([^<]*)<\/a:t>/g)]
-        .map(m => m[1].trim()).filter(Boolean);
-      allText += texts.join('\n') + '\n---\n';
+        .map(m => m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').trim())
+        .filter(Boolean);
+      rawText += texts.join('\n') + '\n';
     }
+    LOG.extractedRawText = rawText.slice(0, 2000);
 
-    const lines = allText.split('\n').map(l => l.trim()).filter(Boolean);
+    // フィールド抽出
+    const ex = parseMediaFields(rawText);
+    LOG.detectedPrice   = ex.annual_fee   ? String(ex.annual_fee)   : '';
+    LOG.detectedSize    = ex.size         || '';
+    LOG.detectedAddress = ex.address      || '';
 
-    function after(labels) {
-      for (let i = 0; i < lines.length; i++) {
-        if (labels.some(l => lines[i].includes(l))) {
-          const cm = lines[i].match(/[：:]\s*(.+)/);
-          if (cm && cm[1].trim()) return cm[1].trim();
-          if (lines[i+1] && !lines[i+1].includes('：')) return lines[i+1];
-        }
+    // サムネイル: docProps/thumbnail 優先 → なければスライドCanvasを生成
+    let thumbDataUrl = null;
+    for (const tp of ['docProps/thumbnail.jpeg','docProps/thumbnail.jpg','docProps/thumbnail.png']) {
+      if (zip.files[tp]) {
+        const blob = await zip.files[tp].async('blob');
+        const ext  = tp.split('.').pop();
+        thumbDataUrl = await convertToPNG(new Blob([blob], {type: ext==='png'?'image/png':'image/jpeg'}));
+        LOG.thumbnailPath = tp;
+        break;
       }
-      return '';
+    }
+    if (!thumbDataUrl) {
+      thumbDataUrl = renderTextSlideCanvas(rawText);
+      LOG.thumbnailPath = 'canvas-render';
     }
 
-    const ex = {
-      address:     after(['住所','所在地','場所','住　所']),
-      size:        after(['サイズ','寸法','規格','H×W','縦×横']),
-      format:      after(['形式','種別','媒体種類','掲出形式']),
-      faces:       after(['面数','面　数']),
-      other_fees:  after(['撤去料','原状回復','その他費用','解体費']),
-      survey_date: after(['調査日','調査年月日','撮影日']),
-      notes:       after(['備考','特記事項','注意事項']),
-      manager:     after(['担当者','担当','営業']),
-    };
-    ex.name = after(['媒体名','物件名','名称','件名']);
-    if (!ex.name) ex.name = lines.find(l => l.length >= 4 && !l.includes('：') && l !== '---') || '';
-    const af = parseInt(after(['年間媒体料','年間料','媒体料','賃料']).replace(/[^\d]/g,''));
-    const pf = parseInt(after(['製作費','制作費','施工費','工事費']).replace(/[^\d]/g,''));
-    if (af) ex.annual_fee = af;
-    if (pf) ex.production_fee = pf;
-
-    // 画像抽出（wmf/emfは除外）
-    const images = [];
-    const mediaKeys = Object.keys(zip.files)
-      .filter(k => k.startsWith('ppt/media/') && /\.(png|jpe?g|gif)$/i.test(k))
-      .sort();
-    for (const key of mediaKeys.slice(0, 25)) {
-      try {
-        const blob = await zip.files[key].async('blob');
-        const ext = key.split('.').pop().toLowerCase();
-        const mime = (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg' : 'image/png';
-        const typed = new Blob([blob], {type: mime});
-        const png = await convertToPNG(typed);
-        if (png && png.length > 5000) images.push({filename: key.split('/').pop(), dataUrl: png});
-      } catch(e) {}
-    }
-
+    // フォームを開いて入力
     openForm(null);
     fillFormFields(ex);
-    _pendingImages = images; _selectedThumbIdx = 0;
-    if (images.length) updateFormImagePreview(images);
-    showToast(`✅ PowerPoint読み込み完了（${images.length}枚の画像）`);
-  } catch(e) { showToast('❌ PowerPoint読み込み失敗: ' + e.message, 4000); }
+    _pendingImages = [];
+    if (thumbDataUrl) {
+      _pendingImages = [{filename: 'slide_thumb.png', dataUrl: thumbDataUrl}];
+      _selectedThumbIdx = 0;
+      updateFormImagePreview(_pendingImages);
+    }
+    showToast(`✅ PowerPoint読み込み完了（${slideKeys.length}スライド）`);
+
+  } catch(e) {
+    LOG.errorMessage = e.message;
+    showToast('❌ PowerPoint読み込み失敗: ' + e.message, 4000);
+  } finally {
+    console.group('📊 PPTX解析ログ');
+    console.table(LOG);
+    console.groupEnd();
+  }
+}
+
+// テキスト内容からスライド風Canvas画像を生成
+function renderTextSlideCanvas(rawText) {
+  const W = 800, H = 450;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  // 背景
+  ctx.fillStyle = '#f8f8f8'; ctx.fillRect(0,0,W,H);
+
+  // ヘッダーバー
+  ctx.fillStyle = '#1a3a6b'; ctx.fillRect(0,0,W,56);
+
+  // タイトル（：を含まない最初の4文字以上の行）
+  const lines = rawText.split('\n').map(l=>l.trim()).filter(Boolean);
+  const title = lines.find(l => l.length>=4 && !l.includes('：') && !l.includes(':') &&
+    !['媒体提案書','Image','Location','TAIYOKOUGEISHA'].some(s=>l.includes(s))) || '';
+  ctx.fillStyle='#fff'; ctx.font='bold 20px sans-serif';
+  ctx.fillText(title.slice(0,30), 16, 36);
+
+  // コンテンツエリア（白枠）
+  ctx.fillStyle='#fff'; ctx.fillRect(12,68,W*0.56,H-80);
+  ctx.strokeStyle='#ddd'; ctx.strokeRect(12,68,W*0.56,H-80);
+
+  // テキスト行（：を含む行 = データ行）
+  const dataLines = lines.filter(l=>l.includes('：')||l.includes(':'));
+  ctx.fillStyle='#222'; ctx.font='13px sans-serif';
+  let y=90;
+  for (const line of dataLines.slice(0,10)) {
+    ctx.fillText(line.slice(0,38), 20, y);
+    y+=22; if(y>H-16) break;
+  }
+
+  // 右側：画像プレースホルダー
+  ctx.fillStyle='#e8e8e8'; ctx.fillRect(W*0.58+8,68,W*0.40-8,H-80);
+  ctx.fillStyle='#aaa'; ctx.font='13px sans-serif';
+  ctx.fillText('Image', W*0.76, H/2+8);
+
+  return c.toDataURL('image/png');
+}
+
+/* ================================================================
+   EXCEL PROCESSOR - セルテキスト抽出 + Canvasサムネ
+   ================================================================ */
+async function processExcel(file) {
+  const LOG = {
+    fileType: 'xlsx', sheetCount: 0,
+    extractedRawText: '', detectedPrice: '', detectedSize: '',
+    detectedAddress: '', thumbnailPath: '', errorMessage: ''
+  };
+  try {
+    const data = await file.arrayBuffer();
+    const wb   = XLSX.read(data, {type:'array'});
+    LOG.sheetCount = wb.SheetNames.length;
+
+    // 全シートのセルを結合してテキスト抽出
+    let rawText = '';
+    for (const sheetName of wb.SheetNames) {
+      const ws   = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      rows.forEach(row => {
+        const line = row.map(c=>String(c).trim()).filter(Boolean).join('　');
+        if (line) rawText += line + '\n';
+      });
+    }
+    LOG.extractedRawText = rawText.slice(0,2000);
+
+    // フィールド抽出
+    const ex = parseMediaFields(rawText);
+    LOG.detectedPrice   = ex.annual_fee   ? String(ex.annual_fee)   : '';
+    LOG.detectedSize    = ex.size         || '';
+    LOG.detectedAddress = ex.address      || '';
+
+    // サムネイル: 最初のシートをCanvasに描画
+    const ws0 = wb.Sheets[wb.SheetNames[0]];
+    const thumbDataUrl = renderExcelCanvas(ws0, wb.SheetNames[0]);
+    LOG.thumbnailPath = 'canvas-render-excel';
+
+    // フォームを開いて入力
+    openForm(null);
+    fillFormFields(ex);
+    _pendingImages = [];
+    if (thumbDataUrl) {
+      _pendingImages = [{filename: 'excel_thumb.png', dataUrl: thumbDataUrl}];
+      _selectedThumbIdx = 0;
+      updateFormImagePreview(_pendingImages);
+    }
+    showToast(`✅ Excel読み込み完了（${wb.SheetNames.length}シート）`);
+
+  } catch(e) {
+    LOG.errorMessage = e.message;
+    showToast('❌ Excel読み込み失敗: ' + e.message, 4000);
+  } finally {
+    console.group('📊 Excel解析ログ');
+    console.table(LOG);
+    console.groupEnd();
+  }
+}
+
+// Excelシートの内容をCanvasに描画してDataURLを返す
+function renderExcelCanvas(ws, sheetName) {
+  const W = 800, H = 500;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  // 背景
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H);
+
+  // シート名バー
+  ctx.fillStyle = '#1d6f42'; ctx.fillRect(0,0,W,30);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif';
+  ctx.fillText('📊 ' + sheetName, 10, 20);
+
+  if (!ws['!ref']) { ctx.fillStyle='#999'; ctx.fillText('データなし',20,60); return c.toDataURL(); }
+
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const maxRow = Math.min(range.e.r, range.s.r + 24);
+  const maxCol = Math.min(range.e.c, range.s.c + 12);
+  const rows   = maxRow - range.s.r + 1;
+  const cols   = maxCol - range.s.c + 1;
+  const cellH  = Math.min(22, (H-36) / rows);
+  const cellW  = Math.min(90, W / cols);
+
+  for (let r = range.s.r; r <= maxRow; r++) {
+    for (let cc2 = range.s.c; cc2 <= maxCol; cc2++) {
+      const ref  = XLSX.utils.encode_cell({r, c: cc2});
+      const cell = ws[ref];
+      const x = (cc2 - range.s.c) * cellW;
+      const y = 36 + (r - range.s.r) * cellH;
+
+      // 枠線
+      ctx.strokeStyle = '#ddd'; ctx.lineWidth = 0.5;
+      ctx.strokeRect(x+0.5, y+0.5, cellW, cellH);
+
+      if (cell && cell.v !== undefined) {
+        const v = String(cell.v).trim().slice(0, 12);
+        // ヘッダー行っぽいセルは背景色
+        if (r === range.s.r) { ctx.fillStyle='#e8f4ea'; ctx.fillRect(x+0.5,y+0.5,cellW,cellH); }
+        ctx.fillStyle = '#111';
+        ctx.font = (r === range.s.r ? 'bold ' : '') + '10px sans-serif';
+        ctx.fillText(v, x+3, y+cellH-5);
+      }
+    }
+  }
+  return c.toDataURL('image/png');
 }
 
 function fillFormFields(fields) {
