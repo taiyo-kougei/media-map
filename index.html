@@ -1814,6 +1814,7 @@ async function processImageFile(file) {
     ex.notes   = after(['備考']);
     const sz = after(['Size', 'size']);
     if (sz) ex.size = sz.replace(/各/g, '').trim();
+    if (!ex.size) { const sm = tableText.match(/Size[：:]\s*([H\dxX×✕W\d]+)/); if (sm) ex.size = sm[1].trim(); }
 
     const feeRaw = after(['媒体料金', '年間媒体料']);
     if (feeRaw) { const n = feeRaw.match(/[\d,]+/); if (n) ex.annual_fee = parseInt(n[0].replace(/,/g,'')); }
