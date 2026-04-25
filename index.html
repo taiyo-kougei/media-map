@@ -1237,7 +1237,7 @@
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/tesseract.min.js?v=5"></script>
 <script src="media_data.js?v=20260423"></script>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
@@ -1754,12 +1754,7 @@ async function handleFileDrop(file) {
   else showToast('⚠️ 対応: .xlsx .pptx .png .jpg', 3500);
 }
 
-const _OCR_OPTS = {
-  workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/worker.min.js',
-  langPath:   'https://tessdata.projectnaptha.com/4.0.0',
-  corePath:   'https://cdn.jsdelivr.net/npm/tesseract.js-core@4.0.4',
-  logger: () => {}
-};
+const _OCR_OPTS = { logger: () => {} };
 
 function makeSlideCrop(baseCanvas, xRatio, yRatio, wRatio, hRatio, invert) {
   const W = baseCanvas.width, H = baseCanvas.height;
