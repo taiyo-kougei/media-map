@@ -1754,18 +1754,12 @@ async function handleFileDrop(file) {
   else showToast('⚠️ 対応: .xlsx .pptx .png .jpg', 3500);
 }
 
-let _tWorker = null;
-async function getTWorker() {
-  if (!_tWorker) {
-    _tWorker = await Tesseract.createWorker('jpn+eng', 1, {
-      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/worker.min.js',
-      langPath:   'https://tessdata.projectnaptha.com/4.0.0',
-      corePath:   'https://cdn.jsdelivr.net/npm/tesseract.js-core@4.0.4',
-      logger: () => {}
-    });
-  }
-  return _tWorker;
-}
+const _OCR_OPTS = {
+  workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/worker.min.js',
+  langPath:   'https://tessdata.projectnaptha.com/4.0.0',
+  corePath:   'https://cdn.jsdelivr.net/npm/tesseract.js-core@4.0.4',
+  logger: () => {}
+};
 
 function makeSlideCrop(baseCanvas, xRatio, yRatio, wRatio, hRatio, invert) {
   const W = baseCanvas.width, H = baseCanvas.height;
@@ -1829,8 +1823,9 @@ async function processImageFile(file) {
   _pendingImages.push({filename: file.name, dataUrl});
   _selectedThumbIdx = _pendingImages.length - 1;
   updateFormImagePreview(_pendingImages);
-  showToast('🔍 画像解析中… 初回はデータ取得のため少々お待ちください');
+  showToast('🔍 画像解析中… 初回のみ言語データ取得のため時間がかかります');
 
+  let worker = null;
   try {
     const img = new Image();
     img.src = dataUrl;
@@ -1848,17 +1843,19 @@ async function processImageFile(file) {
     // テーブル（住所・料金等）: 黒文字白背景 → そのまま
     const tableCv  = makeSlideCrop(base, 0.00, 0.07, 0.56, 0.68, false);
 
-    const worker = await getTWorker();
-    const [hRes, tRes] = await Promise.all([
-      worker.recognize(headerCv),
-      worker.recognize(tableCv)
-    ]);
+    // ワーカーを毎回新規作成（初回のみ言語データDL、2回目以降はブラウザキャッシュ）
+    worker = await Tesseract.createWorker('jpn+eng', 1, _OCR_OPTS);
+    const hRes = await worker.recognize(headerCv);
+    const tRes = await worker.recognize(tableCv);
+    await worker.terminate();
+    worker = null;
 
     const ex = parseSlideText(hRes.data.text, tRes.data.text);
     fillFormFields(ex);
     showToast('✅ 画像から情報を自動入力しました');
   } catch(e) {
-    console.error('OCR error:', e, typeof e, JSON.stringify(e));
+    if (worker) { try { await worker.terminate(); } catch(_){} }
+    console.error('OCR error:', e);
     const msg = (e && (e.message || e.toString())) || String(e) || '不明なエラー';
     showToast('⚠️ 解析失敗: ' + msg, 4000);
   }
