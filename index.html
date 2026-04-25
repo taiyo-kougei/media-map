@@ -1760,7 +1760,7 @@ async function getTWorker() {
     _tWorker = await Tesseract.createWorker('jpn+eng', 1, {
       workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/worker.min.js',
       langPath:   'https://tessdata.projectnaptha.com/4.0.0',
-      corePath:   'https://cdn.jsdelivr.net/npm/tesseract.js-core@4.0.6/tesseract-core.wasm.js',
+      corePath:   'https://cdn.jsdelivr.net/npm/tesseract.js-core@4.0.4',
       logger: () => {}
     });
   }
