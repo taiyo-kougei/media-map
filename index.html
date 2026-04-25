@@ -1762,72 +1762,92 @@ async function processImageFile(file) {
   updateFormImagePreview(_pendingImages);
   showToast('🔍 画像解析中...');
 
-  // リサイズ（サーバー送信用）
+  // リサイズ
   const img = new Image();
   img.src = dataUrl;
   await new Promise(r => { img.onload = r; });
-  const scale = Math.min(1, 1200 / img.width);
-  const cv = document.createElement('canvas');
-  cv.width = Math.round(img.width * scale);
-  cv.height = Math.round(img.height * scale);
-  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-  const resizedB64 = cv.toDataURL('image/jpeg', 0.88);
+  const sc = Math.min(1, 1200 / img.width);
+  const cv0 = document.createElement('canvas');
+  cv0.width = Math.round(img.width * sc); cv0.height = Math.round(img.height * sc);
+  cv0.getContext('2d').drawImage(img, 0, 0, cv0.width, cv0.height);
+  const b64full = cv0.toDataURL('image/jpeg', 0.88).split(',')[1];
 
-  async function ocrRequest(type) {
-    const resp = await fetch('http://localhost:8765/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: resizedB64, type })
-    });
-    if (!resp.ok) throw new Error('server ' + resp.status);
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    return data.text || '';
+  // ── クロップ関数（ローカル処理）──
+  function makeCrop(xr, yr, wr, hr, invert) {
+    const W = cv0.width, H = cv0.height;
+    const cc = document.createElement('canvas');
+    cc.width = Math.round(W*wr*2); cc.height = Math.round(H*hr*2);
+    const ctx = cc.getContext('2d');
+    ctx.fillStyle='white'; ctx.fillRect(0,0,cc.width,cc.height);
+    ctx.drawImage(cv0, W*xr, H*yr, W*wr, H*hr, 0, 0, cc.width, cc.height);
+    if (invert) {
+      const d = ctx.getImageData(0,0,cc.width,cc.height);
+      for (let i=0;i<d.data.length;i+=4){d.data[i]=255-d.data[i];d.data[i+1]=255-d.data[i+1];d.data[i+2]=255-d.data[i+2];}
+      ctx.putImageData(d,0,0);
+    }
+    return cc.toDataURL('image/jpeg', 0.90).split(',')[1];
+  }
+  const b64header = makeCrop(0.20, 0.00, 0.48, 0.09, true);
+  const b64table  = makeCrop(0.00, 0.07, 0.56, 0.68, false);
+
+  // ── Google Vision API で OCR ──
+  async function visionOCR(b64) {
+    const r = await fetch(
+      'https://vision.googleapis.com/v1/images:annotate?key=AIzaSyCAyBtvVrtiVrZZL358Ae42SvPiUnbL5sE',
+      { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({requests:[{image:{content:b64},features:[{type:'TEXT_DETECTION'}]}]}) }
+    );
+    if (!r.ok) throw new Error('vision_' + r.status);
+    const j = await r.json();
+    if (j.error || j.responses?.[0]?.error) throw new Error('vision_err');
+    return j.responses?.[0]?.fullTextAnnotation?.text || '';
   }
 
-  try {
-    const [headerText, tableText] = await Promise.all([
-      ocrRequest('header'),
-      ocrRequest('table')
-    ]);
-
-    // 媒体名：ヘッダーから「媒体提案書」「Image」以外の行
-    const headerLines = headerText.split('\n').map(l => l.trim()).filter(l => l.length > 1);
-    const skipH = ['媒体提案', 'Image', 'mage', 'TAIYO'];
-    const name = headerLines.find(l => l.length >= 3 && !skipH.some(s => l.includes(s))) || '';
-
-    const tableLines = tableText.split('\n').map(l => l.trim()).filter(Boolean);
+  function parseOCR(headerText, tableText) {
+    const headerLines = headerText.split('\n').map(l=>l.trim()).filter(l=>l.length>1);
+    const skipH = ['媒体提案','Image','mage','TAIYO'];
+    const name = headerLines.find(l=>l.length>=3 && !skipH.some(s=>l.includes(s))) || '';
+    const tl = tableText.split('\n').map(l=>l.trim()).filter(Boolean);
     function after(labels) {
-      for (let i = 0; i < tableLines.length; i++) {
-        if (labels.some(l => tableLines[i].includes(l))) {
-          const cm = tableLines[i].match(/[：:]\s*(.+)/);
-          if (cm && cm[1].trim()) return cm[1].trim();
-          if (i+1 < tableLines.length && tableLines[i+1] && !tableLines[i+1].includes('：')) return tableLines[i+1];
+      for (let i=0;i<tl.length;i++) {
+        if (labels.some(l=>tl[i].includes(l))) {
+          const m = tl[i].match(/[：:]\s*(.+)/);
+          if (m && m[1].trim()) return m[1].trim();
+          if (i+1<tl.length && tl[i+1] && !tl[i+1].includes('：')) return tl[i+1];
         }
       }
       return '';
     }
-
-    const ex = { name };
-    ex.address = after(['掲出場所', '住所', '所在地']);
-    ex.format  = after(['看板種類', '媒体種類']);
+    const ex = {name};
+    ex.address = after(['掲出場所','住所','所在地']);
+    ex.format  = after(['看板種類','媒体種類']);
     ex.notes   = after(['備考']);
-    const sz = after(['Size', 'size']);
-    if (sz) ex.size = sz.replace(/各/g, '').trim();
-    if (!ex.size) { const sm = tableText.match(/Size[：:]\s*([H\dxX×✕W\d]+)/); if (sm) ex.size = sm[1].trim(); }
+    const sz = after(['Size','size']);
+    ex.size = (sz||'').replace(/各/g,'').trim();
+    if (!ex.size){const m=tableText.match(/Size[：:]\s*([\w×✕xX\d]+)/);if(m)ex.size=m[1];}
+    const fn=(s)=>{const m=(s||'').match(/[\d,]+/);return m?parseInt(m[0].replace(/,/g,'')):null;};
+    const f=fn(after(['媒体料金','年間媒体料']));     if(f) ex.annual_fee=f;
+    const p=fn(after(['製作取付費','製作費']));        if(p) ex.production_fee=p;
+    const o=fn(after(['撤去費','原状回復','現状回復']));if(o) ex.other_fees=o;
+    return ex;
+  }
 
-    const feeRaw = after(['媒体料金', '年間媒体料']);
-    if (feeRaw) { const n = feeRaw.match(/[\d,]+/); if (n) ex.annual_fee = parseInt(n[0].replace(/,/g,'')); }
-    const pfRaw  = after(['製作取付費', '製作費']);
-    if (pfRaw)  { const n = pfRaw.match(/[\d,]+/);  if (n) ex.production_fee = parseInt(n[0].replace(/,/g,'')); }
-    const ofRaw  = after(['撤去費', '原状回復', '現状回復']);
-    if (ofRaw)  { const n = ofRaw.match(/[\d,]+/);  if (n) ex.other_fees = parseInt(n[0].replace(/,/g,'')); }
-
-    fillFormFields(ex);
+  try {
+    const [ht, tt] = await Promise.all([visionOCR(b64header), visionOCR(b64table)]);
+    fillFormFields(parseOCR(ht, tt));
     showToast('✅ 画像から情報を自動入力しました');
   } catch(e) {
+    // Vision API 未有効 → ユーザーに有効化を案内
+    if (String(e).includes('vision_403') || String(e).includes('vision_')) {
+      showToast('⚠️ Google Vision APIを有効化してください（1回だけ）', 6000);
+      setTimeout(()=>{
+        if(confirm('Google Vision APIを有効化しますか？\n（1回だけ必要。クリックすると設定ページが開きます）'))
+          window.open('https://console.cloud.google.com/apis/library/vision.googleapis.com?project=1004930903651','_blank');
+      }, 500);
+    } else {
+      showToast('⚠️ 解析失敗: ' + e.message, 4000);
+    }
     console.warn('OCR error:', e);
-    showToast('⚠️ OCRサーバー未起動。ocr_server.py を起動してください。', 5000);
   }
 }
 
