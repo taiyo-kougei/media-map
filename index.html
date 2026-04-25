@@ -1754,7 +1754,10 @@ async function handleFileDrop(file) {
   else showToast('⚠️ 対応: .xlsx .pptx .png .jpg', 3500);
 }
 
-const _OCR_OPTS = { logger: () => {} };
+const _OCR_OPTS = {
+  corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v4.0.4/tesseract-core.wasm.js',
+  logger: () => {}
+};
 
 function makeSlideCrop(baseCanvas, xRatio, yRatio, wRatio, hRatio, invert) {
   const W = baseCanvas.width, H = baseCanvas.height;
