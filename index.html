@@ -1760,78 +1760,73 @@ async function processImageFile(file) {
   _pendingImages.push({filename: file.name, dataUrl});
   _selectedThumbIdx = _pendingImages.length - 1;
   updateFormImagePreview(_pendingImages);
-  showToast('🔍 画像を解析中...');
+  showToast('🔍 画像解析中...');
+
+  // リサイズ（サーバー送信用）
+  const img = new Image();
+  img.src = dataUrl;
+  await new Promise(r => { img.onload = r; });
+  const scale = Math.min(1, 1200 / img.width);
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(img.width * scale);
+  cv.height = Math.round(img.height * scale);
+  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  const resizedB64 = cv.toDataURL('image/jpeg', 0.88);
+
+  async function ocrRequest(type) {
+    const resp = await fetch('http://localhost:8765/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: resizedB64, type })
+    });
+    if (!resp.ok) throw new Error('server ' + resp.status);
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    return data.text || '';
+  }
 
   try {
-    // リサイズ（OCR送信用 max 900px）
-    const img = new Image();
-    img.src = dataUrl;
-    await new Promise(r => { img.onload = r; });
-    const scale = Math.min(1, 900 / img.width);
-    const cv = document.createElement('canvas');
-    cv.width = Math.round(img.width * scale);
-    cv.height = Math.round(img.height * scale);
-    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-    const b64 = cv.toDataURL('image/jpeg', 0.82).split(',')[1];
+    const [headerText, tableText] = await Promise.all([
+      ocrRequest('header'),
+      ocrRequest('table')
+    ]);
 
-    const fd = new FormData();
-    fd.append('apikey', 'helloworld');
-    fd.append('language', 'jpn');
-    fd.append('OCREngine', '2');
-    fd.append('isOverlayRequired', 'false');
-    fd.append('base64Image', 'data:image/jpeg;base64,' + b64);
+    // 媒体名：ヘッダーから「媒体提案書」「Image」以外の行
+    const headerLines = headerText.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+    const skipH = ['媒体提案', 'Image', 'mage', 'TAIYO'];
+    const name = headerLines.find(l => l.length >= 3 && !skipH.some(s => l.includes(s))) || '';
 
-    const resp = await fetch('https://api.ocr.space/parse/image', { method: 'POST', body: fd });
-    if (!resp.ok) throw new Error('OCR HTTP ' + resp.status);
-    const result = await resp.json();
-    if (result.IsErroredOnProcessing) throw new Error(result.ErrorMessage?.[0] || 'OCR error');
-
-    const raw = result.ParsedResults?.[0]?.ParsedText || '';
-    if (!raw) throw new Error('no text');
-
-    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-
+    const tableLines = tableText.split('\n').map(l => l.trim()).filter(Boolean);
     function after(labels) {
-      for (let i = 0; i < lines.length; i++) {
-        if (labels.some(l => lines[i].includes(l))) {
-          const cm = lines[i].match(/[：:]\s*(.+)/);
+      for (let i = 0; i < tableLines.length; i++) {
+        if (labels.some(l => tableLines[i].includes(l))) {
+          const cm = tableLines[i].match(/[：:]\s*(.+)/);
           if (cm && cm[1].trim()) return cm[1].trim();
-          if (i + 1 < lines.length && lines[i + 1] && !lines[i + 1].includes('：') && !lines[i + 1].includes(':')) return lines[i + 1];
+          if (i+1 < tableLines.length && tableLines[i+1] && !tableLines[i+1].includes('：')) return tableLines[i+1];
         }
       }
       return '';
     }
 
-    // 媒体名：ラベルなしで「媒体No」や「エリア」を含む行、またはヘッダー付近の独立行
-    const skipWords = ['媒体提案', 'Image', 'Location', 'TAIYOKOUGEISHA', '消費税', '※', 'EX', 'Size', 'size'];
-    const skipLabels = ['掲出場所', '看板種類', '媒体料金', '製作取付', '撤去費', '原状回復', '備考', '現状回復'];
-    let name = lines.find(l =>
-      l.length >= 3 && l.length <= 50 &&
-      !l.includes('：') && !l.includes(':') &&
-      !skipWords.some(w => l.includes(w)) &&
-      !skipLabels.some(w => l.includes(w)) &&
-      !/^[\d\s\-\/\.]+$/.test(l)
-    ) || '';
-
     const ex = { name };
-    ex.address        = after(['掲出場所', '住所', '所在地']);
-    ex.format         = after(['看板種類', '媒体種類']);
-    const sizeRaw     = after(['Size', 'size', 'サイズ']);
-    if (sizeRaw)      ex.size = sizeRaw.replace(/各/g, '').trim();
-    ex.notes          = after(['備考']);
+    ex.address = after(['掲出場所', '住所', '所在地']);
+    ex.format  = after(['看板種類', '媒体種類']);
+    ex.notes   = after(['備考']);
+    const sz = after(['Size', 'size']);
+    if (sz) ex.size = sz.replace(/各/g, '').trim();
 
     const feeRaw = after(['媒体料金', '年間媒体料']);
-    if (feeRaw) { const n = feeRaw.match(/[\d,]+/); if (n) ex.annual_fee = parseInt(n[0].replace(/,/g, '')); }
-    const pfRaw  = after(['製作取付費', '製作費', '取付費']);
-    if (pfRaw)  { const n = pfRaw.match(/[\d,]+/);  if (n) ex.production_fee = parseInt(n[0].replace(/,/g, '')); }
+    if (feeRaw) { const n = feeRaw.match(/[\d,]+/); if (n) ex.annual_fee = parseInt(n[0].replace(/,/g,'')); }
+    const pfRaw  = after(['製作取付費', '製作費']);
+    if (pfRaw)  { const n = pfRaw.match(/[\d,]+/);  if (n) ex.production_fee = parseInt(n[0].replace(/,/g,'')); }
     const ofRaw  = after(['撤去費', '原状回復', '現状回復']);
-    if (ofRaw)  { const n = ofRaw.match(/[\d,]+/);  if (n) ex.other_fees = parseInt(n[0].replace(/,/g, '')); }
+    if (ofRaw)  { const n = ofRaw.match(/[\d,]+/);  if (n) ex.other_fees = parseInt(n[0].replace(/,/g,'')); }
 
     fillFormFields(ex);
     showToast('✅ 画像から情報を自動入力しました');
   } catch(e) {
-    console.warn('画像解析エラー:', e);
-    showToast('⚠️ 解析失敗: ' + e.message, 4000);
+    console.warn('OCR error:', e);
+    showToast('⚠️ OCRサーバー未起動。ocr_server.py を起動してください。', 5000);
   }
 }
 
