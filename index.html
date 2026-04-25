@@ -1758,7 +1758,7 @@ const _OCR_BASE = location.origin + location.pathname.replace(/\/[^/]*$/, '/');
 const _OCR_OPTS = {
   workerPath: _OCR_BASE + 'tesseract-worker.min.js',
   corePath:   _OCR_BASE + 'tesseract-core.wasm.js',
-  langPath:   'https://tessdata.projectnaptha.com/4.0.0',
+  langPath:   'https://tessdata.projectnaptha.com/4.0.0_fast',
   logger: () => {}
 };
 
@@ -1845,7 +1845,7 @@ async function processImageFile(file) {
     const tableCv  = makeSlideCrop(base, 0.00, 0.07, 0.56, 0.68, false);
 
     // ワーカーを毎回新規作成（初回のみ言語データDL、2回目以降はブラウザキャッシュ）
-    worker = await Tesseract.createWorker('jpn+eng', 1, _OCR_OPTS);
+    worker = await Tesseract.createWorker('jpn', 1, _OCR_OPTS);
     const hRes = await worker.recognize(headerCv);
     const tRes = await worker.recognize(tableCv);
     await worker.terminate();
