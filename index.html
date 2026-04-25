@@ -2,6 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>太陽巧芸社｜媒体マップ</title>
   <link rel="icon" type="image/png" href="favicon.png">
@@ -1234,7 +1237,7 @@
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://unpkg.com/tesseract.js@v4/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/tesseract.min.js"></script>
 <script src="media_data.js?v=20260423"></script>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
@@ -1755,9 +1758,9 @@ let _tWorker = null;
 async function getTWorker() {
   if (!_tWorker) {
     _tWorker = await Tesseract.createWorker('jpn+eng', 1, {
-      workerPath: 'https://unpkg.com/tesseract.js@v4/dist/worker.min.js',
+      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/worker.min.js',
       langPath:   'https://tessdata.projectnaptha.com/4.0.0',
-      corePath:   'https://unpkg.com/tesseract.js-core@v4/tesseract-core.wasm.js',
+      corePath:   'https://cdn.jsdelivr.net/npm/tesseract.js-core@4.0.6/tesseract-core.wasm.js',
       logger: () => {}
     });
   }
@@ -1855,8 +1858,9 @@ async function processImageFile(file) {
     fillFormFields(ex);
     showToast('✅ 画像から情報を自動入力しました');
   } catch(e) {
-    console.warn('OCR error:', e);
-    showToast('⚠️ 解析失敗: ' + e.message, 4000);
+    console.error('OCR error:', e, typeof e, JSON.stringify(e));
+    const msg = (e && (e.message || e.toString())) || String(e) || '不明なエラー';
+    showToast('⚠️ 解析失敗: ' + msg, 4000);
   }
 }
 
