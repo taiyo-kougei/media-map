@@ -1420,15 +1420,33 @@ async function exportZIP() {
 
       let dataUrl = null;
 
-      // ① item.thumbnail（dataURL）がある場合はそのまま使う
+      // ① item.thumbnail が data URL → そのまま使用
       if (item.thumbnail && item.thumbnail.startsWith('data:')) {
         dataUrl = item.thumbnail;
       }
-      // ② thumbnailがない場合はFirestoreから取得を試みる
-      else if (!item.thumbnail) {
+
+      // ② imagesCol（アップロード済み画像）から取得（常に試みる）
+      if (!dataUrl) {
         try {
           const imgs = await dbLoad(item.id);
-          if (imgs.length > 0) dataUrl = imgs[0].dataUrl;
+          const found = imgs.find(img => img.dataUrl && img.dataUrl.startsWith('data:'));
+          if (found) dataUrl = found.dataUrl;
+        } catch(e) {}
+      }
+
+      // ③ item.thumbnail が外部URL (https://) → fetch で取得
+      if (!dataUrl && item.thumbnail && item.thumbnail.startsWith('http')) {
+        try {
+          const res = await fetch(item.thumbnail);
+          if (res.ok) {
+            const blob = await res.blob();
+            dataUrl = await new Promise((resolve, reject) => {
+              const fr = new FileReader();
+              fr.onload = e => resolve(e.target.result);
+              fr.onerror = () => resolve(null);
+              fr.readAsDataURL(blob);
+            });
+          }
         } catch(e) {}
       }
 
