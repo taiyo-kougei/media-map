@@ -1754,8 +1754,11 @@ async function handleFileDrop(file) {
   else showToast('⚠️ 対応: .xlsx .pptx .png .jpg', 3500);
 }
 
+const _OCR_BASE = location.origin + location.pathname.replace(/\/[^/]*$/, '/');
 const _OCR_OPTS = {
-  corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v4.0.4/tesseract-core.wasm.js',
+  workerPath: _OCR_BASE + 'tesseract-worker.min.js',
+  corePath:   _OCR_BASE + 'tesseract-core.wasm.js',
+  langPath:   'https://tessdata.projectnaptha.com/4.0.0',
   logger: () => {}
 };
 
