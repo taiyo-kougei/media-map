@@ -1866,17 +1866,30 @@ async function processImageFile(file) {
    共通：テキストから媒体フィールドを抽出
    ================================================================ */
 function parseMediaFields(rawText) {
-  // ラベル：値 を正規表現で直接抽出（同一行複数フィールドに対応）
+  // ラベル：値 を抽出（同一行・次行どちらも対応）
   function pick(labels) {
     for (const label of labels) {
       const esc = label.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
-      // 同一行内: ラベル[：:]値（次のラベル：まで or 行末）
-      const re = new RegExp(esc + '[：:﹕]\\s*([^\\n：:]{1,80})', 'u');
-      const m = rawText.match(re);
-      if (m) {
-        let v = m[1].trim();
-        // 後続の「ラベル：」があれば除去（例: 壁面看板　Size：H2000 → 壁面看板）
-        v = v.replace(/\s+\S+[：:]\S*.*$/, '').trim();
+      // パターン1: 同一行 ラベル[：:]値
+      const re1 = new RegExp(esc + '[：:﹕]\\s*([^\\n：:]{1,120})', 'u');
+      const m1 = rawText.match(re1);
+      if (m1) {
+        let v = m1[1].trim();
+        v = v.replace(/\s+\S{1,10}[：:]\S*.*$/, '').trim(); // 後続ラベルを除去
+        if (v && v !== label) return v;
+      }
+      // パターン2: ラベル[：:]の後が空→次行に値がある
+      const re2 = new RegExp(esc + '[：:﹕]\\s*\\n\\s*([^\\n：:]{1,120})', 'u');
+      const m2 = rawText.match(re2);
+      if (m2) {
+        let v = m2[1].trim();
+        if (v && v !== label) return v;
+      }
+      // パターン3: ラベルと値が別行（ラベル行の直後に値）
+      const re3 = new RegExp('(?:^|\\n)' + esc + '\\n([^\\n：:]{1,120})', 'u');
+      const m3 = rawText.match(re3);
+      if (m3) {
+        let v = m3[1].trim();
         if (v && v !== label) return v;
       }
     }
@@ -1939,14 +1952,23 @@ async function processPPTX(file) {
     if (!slideKeys.length) throw new Error('スライドが見つかりません');
 
     // 全スライドのテキストを結合して抽出
+    // ★ <a:p>段落ごとにまとめることで「掲出場所：」と「東京都…」が同一行になる
     let rawText = '';
+    function decodeXmlEntities(s) {
+      return s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#xA;/g,'\n');
+    }
     for (const key of slideKeys) {
       const xml = await zip.files[key].async('string');
-      // <a:t> タグから文字列を取り出しHTMLエンティティをデコード
-      const texts = [...xml.matchAll(/<a:t[^>]*>([^<]*)<\/a:t>/g)]
-        .map(m => m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').trim())
+      // <a:p>…</a:p> 段落ごとに内部の<a:t>テキストを結合して1行にする
+      const paraTexts = [...xml.matchAll(/<a:p[^>]*>([\s\S]*?)<\/a:p>/g)]
+        .map(pm => {
+          const inner = pm[1];
+          return [...inner.matchAll(/<a:t[^>]*>([^<]*)<\/a:t>/g)]
+            .map(tm => decodeXmlEntities(tm[1]))
+            .join('').trim();
+        })
         .filter(Boolean);
-      rawText += texts.join('\n') + '\n';
+      rawText += paraTexts.join('\n') + '\n';
     }
     LOG.extractedRawText = rawText.slice(0, 2000);
 
@@ -1956,32 +1978,55 @@ async function processPPTX(file) {
     LOG.detectedSize    = ex.size         || '';
     LOG.detectedAddress = ex.address      || '';
 
-    // サムネイル: docProps/thumbnail 優先 → なければスライドCanvasを生成
+    // サムネイル生成
+    // ① docProps/thumbnail があれば取得（ただし小さいことが多い）
     let thumbDataUrl = null;
     for (const tp of ['docProps/thumbnail.jpeg','docProps/thumbnail.jpg','docProps/thumbnail.png']) {
       if (zip.files[tp]) {
-        const blob = await zip.files[tp].async('blob');
-        const ext  = tp.split('.').pop();
-        thumbDataUrl = await convertToPNG(new Blob([blob], {type: ext==='png'?'image/png':'image/jpeg'}));
-        LOG.thumbnailPath = tp;
+        try {
+          const blob = await zip.files[tp].async('blob');
+          const ext  = tp.split('.').pop();
+          const du   = await convertToPNG(new Blob([blob], {type: ext==='png'?'image/png':'image/jpeg'}));
+          // docPropsが300px以上あれば使用、小さければCanvas優先
+          if (du) {
+            const img2 = new Image(); img2.src = du;
+            await new Promise(r => { img2.onload = r; img2.onerror = r; });
+            if (img2.naturalWidth >= 400) { thumbDataUrl = du; LOG.thumbnailPath = tp; }
+          }
+        } catch(e) {}
         break;
       }
     }
+    // ② なければ or 小さければ高解像度Canvasで生成
     if (!thumbDataUrl) {
       thumbDataUrl = renderTextSlideCanvas(rawText);
       LOG.thumbnailPath = 'canvas-render';
+    }
+
+    // ③ ppt/media/ の写真もギャラリーに追加（サムネとしてではなく参考画像）
+    const mediaImages = [];
+    const mediaKeys = Object.keys(zip.files)
+      .filter(k => k.startsWith('ppt/media/') && /\.(png|jpe?g|gif)$/i.test(k))
+      .sort();
+    for (const key of mediaKeys.slice(0, 10)) {
+      try {
+        const blob = await zip.files[key].async('blob');
+        const ext  = key.split('.').pop().toLowerCase();
+        const mime = (ext==='jpg'||ext==='jpeg') ? 'image/jpeg' : 'image/png';
+        const du   = await convertToPNG(new Blob([blob], {type: mime}));
+        if (du && du.length > 8000) mediaImages.push({filename: key.split('/').pop(), dataUrl: du});
+      } catch(e) {}
     }
 
     // フォームを開いて入力
     openForm(null);
     fillFormFields(ex);
     _pendingImages = [];
-    if (thumbDataUrl) {
-      _pendingImages = [{filename: 'slide_thumb.png', dataUrl: thumbDataUrl}];
-      _selectedThumbIdx = 0;
-      updateFormImagePreview(_pendingImages);
-    }
-    showToast(`✅ PowerPoint読み込み完了（${slideKeys.length}スライド）`);
+    if (thumbDataUrl) _pendingImages.push({filename: 'slide_thumb.png', dataUrl: thumbDataUrl});
+    _pendingImages.push(...mediaImages);
+    _selectedThumbIdx = 0;
+    if (_pendingImages.length) updateFormImagePreview(_pendingImages);
+    showToast(`✅ PowerPoint読み込み完了（スライド${slideKeys.length}枚・画像${mediaImages.length}枚）`);
 
   } catch(e) {
     LOG.errorMessage = e.message;
