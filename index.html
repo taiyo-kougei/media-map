@@ -1048,7 +1048,7 @@
       <button class="toolbar-btn primary" onclick="openFormAdd()">＋ 新規追加</button>
       <button class="toolbar-btn" id="area-select-btn" onclick="toggleAreaSelect()" title="マップ上で矩形範囲を選択して絞り込む">⬜ エリア選択</button>
       <button class="toolbar-btn danger" id="area-clear-btn" onclick="clearAreaSelect()" style="display:none" title="エリア選択を解除">✕ 解除</button>
-      <button class="toolbar-btn" onclick="exportCSV()" title="現在の絞り込み結果をCSV出力">📥 CSV</button>
+      <button class="toolbar-btn" onclick="exportZIP()" title="現在の絞り込み結果をCSV＋画像でZIPエクスポート">📥 エクスポート</button>
     </div>
   </div>
 
@@ -1364,25 +1364,107 @@ function clearAreaSelect() {
   applyFilters();
 }
 
-function exportCSV() {
+async function exportZIP() {
   if (!filteredData || filteredData.length === 0) { alert('エクスポートするデータがありません'); return; }
-  const headers = ['媒体ID','媒体名','カテゴリー','住所','担当者','看板種類','サイズ','年間媒体料','製作費','その他費用','調査日','備考'];
-  const rows = filteredData.map(item => [
-    item.id || '', item.name || '', item.category || '', item.address || '',
-    item.manager || '', item.format || '', item.size || '',
-    item.annual_fee || '', item.production_fee || '', item.other_fees || '',
-    item.survey_date || '', item.notes || ''
-  ]);
-  const csv = [headers, ...rows]
-    .map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
-    .join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  const dateStr = new Date().toLocaleDateString('ja-JP').replace(/\//g, '-');
-  a.download = `媒体リスト_${dateStr}.csv`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+
+  // プログレスオーバーレイ表示
+  let prog = document.getElementById('export-progress-overlay');
+  if (!prog) {
+    prog = document.createElement('div');
+    prog.id = 'export-progress-overlay';
+    prog.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:99999;display:flex;align-items:center;justify-content:center';
+    prog.innerHTML = `<div style="background:white;border-radius:14px;padding:28px 36px;text-align:center;min-width:260px;box-shadow:0 8px 32px rgba(0,0,0,0.25)">
+      <div style="font-size:28px;margin-bottom:10px">📦</div>
+      <div id="export-prog-msg" style="font-size:14px;font-weight:700;color:#1a3a6b;margin-bottom:14px">準備中…</div>
+      <div style="background:#e8eaed;border-radius:99px;height:8px;overflow:hidden">
+        <div id="export-prog-bar" style="height:100%;background:linear-gradient(90deg,#1a73e8,#0f2a5e);border-radius:99px;width:0%;transition:width 0.2s"></div>
+      </div>
+      <div id="export-prog-sub" style="font-size:11px;color:#5f6368;margin-top:8px">しばらくお待ちください</div>
+    </div>`;
+    document.body.appendChild(prog);
+  }
+  const setMsg = (msg, pct, sub) => {
+    document.getElementById('export-prog-msg').textContent = msg;
+    document.getElementById('export-prog-bar').style.width = pct + '%';
+    if (sub != null) document.getElementById('export-prog-sub').textContent = sub;
+  };
+  prog.style.display = 'flex';
+
+  try {
+    const zip = new JSZip();
+    const imgFolder = zip.folder('images');
+    const total = filteredData.length;
+
+    // ── CSV生成
+    setMsg('CSVを生成中…', 5);
+    await new Promise(r => setTimeout(r, 0)); // UI更新のためyield
+    const headers = ['媒体ID','媒体名','カテゴリー','住所','担当者','看板種類','サイズ','年間媒体料','製作費','その他費用','調査日','備考'];
+    const rows = filteredData.map(item => [
+      item.id||'', item.name||'', item.category||'', item.address||'',
+      item.manager||'', item.format||'', item.size||'',
+      item.annual_fee||'', item.production_fee||'', item.other_fees||'',
+      item.survey_date||'', item.notes||''
+    ]);
+    const csv = [headers, ...rows]
+      .map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
+      .join('\n');
+    zip.file('媒体リスト.csv', '\uFEFF' + csv);
+
+    // ── 画像収集（item.thumbnail は既にメモリ上のdataURL）
+    let imgCount = 0;
+    for (let i = 0; i < total; i++) {
+      const item = filteredData[i];
+      const pct = Math.round(5 + (i / total) * 80);
+      setMsg(`画像を処理中… ${i+1} / ${total} 件`, pct, item.name || item.id);
+      if (i % 5 === 0) await new Promise(r => setTimeout(r, 0)); // UI更新
+
+      let dataUrl = null;
+
+      // ① item.thumbnail（dataURL）がある場合はそのまま使う
+      if (item.thumbnail && item.thumbnail.startsWith('data:')) {
+        dataUrl = item.thumbnail;
+      }
+      // ② thumbnailがない場合はFirestoreから取得を試みる
+      else if (!item.thumbnail) {
+        try {
+          const imgs = await dbLoad(item.id);
+          if (imgs.length > 0) dataUrl = imgs[0].dataUrl;
+        } catch(e) {}
+      }
+
+      if (dataUrl && dataUrl.startsWith('data:')) {
+        const [header, b64] = dataUrl.split(',');
+        const ext = header.includes('png') ? 'png' : 'jpg';
+        imgFolder.file(`${item.id || 'item_'+i}.${ext}`, b64, { base64: true });
+        imgCount++;
+      }
+    }
+
+    // ── ZIP生成
+    setMsg('ZIPを生成中…', 88, 'もうすぐ完了します');
+    await new Promise(r => setTimeout(r, 0));
+    const blob = await zip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 5 }
+    });
+
+    setMsg('ダウンロード中…', 100, '');
+    await new Promise(r => setTimeout(r, 200));
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const dateStr = new Date().toLocaleDateString('ja-JP').replace(/\//g, '-');
+    a.download = `媒体リスト_${dateStr}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+
+    showToast(`✅ エクスポート完了（CSV + 画像${imgCount}枚）`);
+  } catch(e) {
+    showToast('❌ エクスポート失敗: ' + e.message, 4000);
+  } finally {
+    prog.style.display = 'none';
+  }
 }
 
 /* ── ピン修正 十字線をmap初期化後に動的追加 ── */
@@ -2858,7 +2940,7 @@ window.closeMobileSidebar  = closeMobileSidebar;
 window.openFormAdd      = openFormAdd;
 window.toggleAreaSelect = toggleAreaSelect;
 window.clearAreaSelect  = clearAreaSelect;
-window.exportCSV        = exportCSV;
+window.exportZIP        = exportZIP;
 window.openFormEdit     = openFormEdit;
 window.closeForm        = closeForm;
 window.geocodeAddress   = geocodeAddress;
