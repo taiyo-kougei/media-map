@@ -1470,6 +1470,11 @@ async function handleContractCSV(event) {
     }
 
     applyFilters();
+    // マーカーアイコンを全件再描画（契約状況の色変更を反映）
+    Object.keys(allMarkers).forEach(id => {
+      const d = liveData.find(x => x.id === id);
+      if (d) allMarkers[id].setIcon(makeIcon(d.category, activeItem?.id === id, d.contract_status));
+    });
     const unmatched = managed.length - matched;
     showToast(
       `✅ 契約状況を更新しました（🟢契約中 ${managed.filter(x=>x.contract_status==='契約中').length}件 / 🔴未契約 ${managed.filter(x=>x.contract_status==='未契約').length}件` +
@@ -2740,6 +2745,7 @@ function setupRealtimeSync() {
         if (i >= 0) liveData[i] = item; else liveData.push(item);
         if (allMarkers[item.id] && item.lat && item.lng) {
           allMarkers[item.id].setPosition({ lat: item.lat, lng: item.lng });
+          allMarkers[item.id].setIcon(makeIcon(item.category, activeItem?.id === item.id, item.contract_status));
         }
       } else if (change.type === 'removed') {
         liveData = liveData.filter(x => x.id !== change.doc.id);
