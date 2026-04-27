@@ -1812,6 +1812,11 @@ function renderList() {
 function renderMarkers() {
   if (pinMoveMode) return;
   cluster.clearMarkers();
+  const filteredIds = new Set(filteredData.map(x => x.id));
+  // 明示的に全マーカーの表示/非表示を切り替え
+  Object.entries(allMarkers).forEach(([id, marker]) => {
+    marker.setMap(filteredIds.has(id) ? map : null);
+  });
   const markers = filteredData.filter(item => allMarkers[item.id]).map(item => allMarkers[item.id]);
   cluster.addMarkers(markers);
 }
@@ -3085,7 +3090,7 @@ async function startApp() {
     if (connected) {
       bar.className = '';
       document.getElementById('data-source-icon').textContent = '🟢';
-      document.getElementById('data-source-text').textContent = 'スプレッドシート連携中';
+      document.getElementById('data-source-text').textContent = 'リアルタイム同期中';
       document.getElementById('data-updated').textContent =
         '更新: ' + new Date().toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
     } else {
