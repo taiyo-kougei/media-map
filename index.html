@@ -2110,7 +2110,7 @@ function parseMediaFields(rawText) {
   const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
 
   // 媒体名: ラベル優先 → ヘッダーっぽい行を探す
-  let name = pick(['媒体名','物件名','名称','件名']);
+  let name = pick(['媒体名','物件名','名称','件名','店舗名']);
   if (!name) {
     name = lines.find(l =>
       l.length >= 4 && l.length <= 40 &&
@@ -2295,33 +2295,73 @@ async function processExcel(file) {
   const LOG = {
     fileType: 'xlsx', sheetCount: 0,
     extractedRawText: '', detectedPrice: '', detectedSize: '',
-    detectedAddress: '', thumbnailPath: '', errorMessage: ''
+    detectedAddress: '', thumbnailPath: '', errorMessage: '', format: 'generic'
   };
   try {
     const data = await file.arrayBuffer();
     const wb   = XLSX.read(data, {type:'array'});
     LOG.sheetCount = wb.SheetNames.length;
 
-    // 全シートのセルを結合してテキスト抽出
-    let rawText = '';
-    for (const sheetName of wb.SheetNames) {
-      const ws   = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-      rows.forEach(row => {
-        const line = row.map(c=>String(c).trim()).filter(Boolean).join('　');
-        if (line) rawText += line + '\n';
-      });
-    }
-    LOG.extractedRawText = rawText.slice(0,2000);
+    const ws0 = wb.Sheets[wb.SheetNames[0]];
 
-    // フィールド抽出
-    const ex = parseMediaFields(rawText);
+    // セル値を取得するヘルパー
+    const gc = (addr) => { const c = ws0[addr]; return c ? String(c.v ?? '').trim() : ''; };
+    const gn = (addr) => { const c = ws0[addr]; return c && typeof c.v === 'number' ? c.v : parseInt(String(c?.v||'').replace(/[^\d]/g,'')) || 0; };
+
+    // ── 提案資料フォーマット検出（A2=店舗名 かつ A8=所在地 or A9=年間媒体料）
+    const isProposalFormat =
+      gc('A2') === '店舗名' &&
+      (gc('A8') === '所在地' || gc('A9') === '年間媒体料');
+
+    let ex;
+
+    if (isProposalFormat) {
+      LOG.format = 'proposal';
+      const storeName = gc('B2');
+      const address   = gc('B8');
+      const annualFee = gn('B9');
+      const prodFee   = gn('B12');
+      const h         = gc('B5');
+      const w         = gc('B6');
+      const size      = h && w ? `H${h}×W${w}` : '';
+
+      // 備考①〜⑩ を結合
+      const noteRows = ['B15','B16','B17','B18','B19','B20']
+        .map(a => gc(a)).filter(Boolean).join(' / ');
+
+      ex = {
+        id:             storeName,
+        name:           storeName,
+        address,
+        format:         gc('B3'),
+        size,
+        annual_fee:     annualFee || undefined,
+        production_fee: prodFee   || undefined,
+        other_fees:     gc('B13'),
+        faces:          gc('B7'),
+        notes:          noteRows,
+      };
+
+    } else {
+      // ── 汎用フォーマット：全シートのセルをテキスト化して解析
+      let rawText = '';
+      for (const sheetName of wb.SheetNames) {
+        const ws   = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+        rows.forEach(row => {
+          const line = row.map(c=>String(c).trim()).filter(Boolean).join('　');
+          if (line) rawText += line + '\n';
+        });
+      }
+      LOG.extractedRawText = rawText.slice(0,2000);
+      ex = parseMediaFields(rawText);
+    }
+
     LOG.detectedPrice   = ex.annual_fee   ? String(ex.annual_fee)   : '';
     LOG.detectedSize    = ex.size         || '';
     LOG.detectedAddress = ex.address      || '';
 
     // サムネイル: 最初のシートをCanvasに描画
-    const ws0 = wb.Sheets[wb.SheetNames[0]];
     const thumbDataUrl = renderExcelCanvas(ws0, wb.SheetNames[0]);
     LOG.thumbnailPath = 'canvas-render-excel';
 
@@ -2334,7 +2374,8 @@ async function processExcel(file) {
       _selectedThumbIdx = 0;
       updateFormImagePreview(_pendingImages);
     }
-    showToast(`✅ Excel読み込み完了（${wb.SheetNames.length}シート）`);
+    const label = isProposalFormat ? '提案資料' : `汎用（${wb.SheetNames.length}シート）`;
+    showToast(`✅ Excel読み込み完了（${label}）`);
 
   } catch(e) {
     LOG.errorMessage = e.message;
