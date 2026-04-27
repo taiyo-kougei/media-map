@@ -1150,6 +1150,16 @@
             <input type="text" id="form-id" class="form-input" placeholder="例: TB-200">
           </div>
           <div class="form-field">
+            <label class="form-label">契約状況</label>
+            <select id="form-contract_status" class="form-select">
+              <option value="">-- 未設定 --</option>
+              <option value="契約中">🟢 契約中</option>
+              <option value="未契約">🔴 未契約</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
             <label class="form-label">カテゴリ *</label>
             <select id="form-category" class="form-select">
               <option value="">-- 選択してください --</option>
@@ -1158,6 +1168,7 @@
               <option value="解約済み">解約済み</option>
             </select>
           </div>
+          <div class="form-field"></div>
         </div>
         <div class="form-row">
           <div class="form-field">
@@ -2875,7 +2886,7 @@ function openForm(item) {
     });
   }
   const fields = ['id','name','category','address','lat','lng','format','size','faces',
-    'annual_fee','production_fee','other_fees','manager','survey_date','notes','drive_link','thumbnail'];
+    'annual_fee','production_fee','other_fees','manager','survey_date','notes','drive_link','thumbnail','contract_status'];
   fields.forEach(f => {
     const el = document.getElementById('form-' + f);
     if (!el) return;
@@ -2955,8 +2966,9 @@ async function saveForm(existingItem) {
     manager:        document.getElementById('form-manager').value.trim(),
     survey_date:    document.getElementById('form-survey_date').value.trim(),
     notes:          document.getElementById('form-notes').value.trim(),
-    drive_link:     document.getElementById('form-drive_link').value.trim(),
-    thumbnail:      thumbUrl,
+    drive_link:       document.getElementById('form-drive_link').value.trim(),
+    thumbnail:        thumbUrl,
+    contract_status:  document.getElementById('form-contract_status').value || '',
   };
   if (!item.lat || !item.lng) {
     if (!confirm('緯度・経度が未入力です。「📍 住所から検索」で自動入力できます。\nこのまま保存しますか？（ピンは表示されません）')) return;
