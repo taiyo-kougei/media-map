@@ -1509,9 +1509,9 @@ async function exportZIP() {
     // ── CSV生成
     setMsg('CSVを生成中…', 5);
     await new Promise(r => setTimeout(r, 0)); // UI更新のためyield
-    const headers = ['媒体ID','媒体名','カテゴリー','住所','担当者','看板種類','サイズ','年間媒体料','製作費','その他費用','調査日','備考'];
+    const headers = ['媒体ID','媒体名','カテゴリー','契約状況','クライアント','住所','担当者','看板種類','サイズ','年間媒体料','製作費','その他費用','調査日','備考'];
     const rows = filteredData.map(item => [
-      item.id||'', item.name||'', item.category||'', item.address||'',
+      item.id||'', item.name||'', item.category||'', item.contract_status||'', item.client_name||'', item.address||'',
       item.manager||'', item.format||'', item.size||'',
       item.annual_fee||'', item.production_fee||'', item.other_fees||'',
       item.survey_date||'', item.notes||''
