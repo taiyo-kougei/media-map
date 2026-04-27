@@ -650,19 +650,21 @@
 
     /* ── Sidebar bottom toolbar ───────────────── */
     #sidebar-toolbar {
-      padding: 10px 12px;
+      padding: 8px 12px;
       border-top: 1px solid #e8eaed;
       background: white;
       display: flex;
-      gap: 6px;
+      flex-wrap: wrap;
+      gap: 5px;
       flex-shrink: 0;
     }
     .toolbar-btn {
-      flex: 1;
-      padding: 8px 6px;
+      flex: 1 1 calc(50% - 3px);
+      min-width: 0;
+      padding: 7px 4px;
       border: 1.5px solid #dadce0;
       border-radius: 8px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       cursor: pointer;
       background: white;
@@ -1053,7 +1055,7 @@
     <div id="no-results">該当する媒体がありません</div>
     <div id="area-select-banner">⬜ ドラッグで範囲を描いてください</div>
     <div id="sidebar-toolbar">
-      <button class="toolbar-btn primary" onclick="openFormAdd()">＋ 新規追加</button>
+      <button class="toolbar-btn primary" style="flex-basis:100%" onclick="openFormAdd()">＋ 新規追加</button>
       <button class="toolbar-btn" id="area-select-btn" onclick="toggleAreaSelect()" title="マップ上で矩形範囲を選択して絞り込む">⬜ エリア選択</button>
       <button class="toolbar-btn danger" id="area-clear-btn" onclick="clearAreaSelect()" style="display:none" title="エリア選択を解除">✕ 解除</button>
       <button class="toolbar-btn" onclick="exportZIP()" title="現在の絞り込み結果をCSV＋画像でZIPエクスポート">📥 エクスポート</button>
