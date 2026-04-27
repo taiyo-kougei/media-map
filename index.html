@@ -1418,8 +1418,23 @@ async function handleContractCSV(event) {
       if (id) contractMap.set(id, client);
     }
 
-    // 管理中媒体を照合・更新
+    // ── デバッグ：IDの照合状況をコンソールに出力
     const managed = liveData.filter(x => x.category === '管理中');
+    const sampleMapIds    = [...contractMap.keys()].slice(0, 5);
+    const sampleLiveIds   = managed.slice(0, 5).map(x => x.id);
+    console.group('📋 契約更新デバッグ');
+    console.log('CSV行数:', contractMap.size, '| 管理中件数:', managed.length);
+    console.log('CSV IDサンプル:', sampleMapIds);
+    console.log('liveData IDサンプル:', sampleLiveIds);
+    const preCheck = managed.filter(x => contractMap.has(x.id)).length;
+    console.log('照合一致数:', preCheck);
+    console.groupEnd();
+
+    if (preCheck === 0) {
+      showToast(`⚠️ IDが一致しません。CSV形式を確認してください（CSV例: ${sampleMapIds[0]} / マップ例: ${sampleLiveIds[0]}）`, 6000);
+      return;
+    }
+
     let updated = 0, matched = 0;
 
     for (const item of managed) {
