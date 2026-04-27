@@ -675,6 +675,14 @@
     .toolbar-btn.primary:hover { background: #0f2a5e; }
     .toolbar-btn.active { background: #e8f0fe; border-color: #1a73e8; color: #1a73e8; }
     .toolbar-btn.danger { background: #fce8e6; border-color: #ea4335; color: #ea4335; }
+    .contract-badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      padding: 1px 5px; border-radius: 8px; margin-left: 5px; vertical-align: middle;
+    }
+    .contract-badge.active   { background: #e6f4ea; color: #137333; }
+    .contract-badge.inactive { background: #fce8e6; color: #c5221f; }
+    .detail-contract-active   { color: #137333; font-weight: 700; }
+    .detail-contract-inactive { color: #c5221f; font-weight: 700; }
     #area-select-banner {
       display: none;
       margin: 6px 12px 0;
@@ -1049,6 +1057,8 @@
       <button class="toolbar-btn" id="area-select-btn" onclick="toggleAreaSelect()" title="マップ上で矩形範囲を選択して絞り込む">⬜ エリア選択</button>
       <button class="toolbar-btn danger" id="area-clear-btn" onclick="clearAreaSelect()" style="display:none" title="エリア選択を解除">✕ 解除</button>
       <button class="toolbar-btn" onclick="exportZIP()" title="現在の絞り込み結果をCSV＋画像でZIPエクスポート">📥 エクスポート</button>
+      <input type="file" id="csv-contract-input" accept=".csv" style="display:none" onchange="handleContractCSV(event)">
+      <button class="toolbar-btn" onclick="document.getElementById('csv-contract-input').click()" title="サイボウズCSVで契約状況を更新">📋 契約更新</button>
     </div>
   </div>
 
@@ -1364,6 +1374,79 @@ function clearAreaSelect() {
   applyFilters();
 }
 
+/* ================================================================
+   契約状況 CSV 更新（サイボウズ Office エクスポートCSV）
+   A列=媒体ID, L列=クライアント名称（空なら未契約）
+   ================================================================ */
+function parseCSVLine(line) {
+  const cols = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { cols.push(cur); cur = ''; }
+    else { cur += c; }
+  }
+  cols.push(cur);
+  return cols;
+}
+
+async function handleContractCSV(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+
+  showToast('📋 契約状況を更新中…', 60000);
+  try {
+    // UTF-8（BOM付き対応）で読み込み、失敗時はShift-JIS
+    const buf = await file.arrayBuffer();
+    let text;
+    try {
+      text = new TextDecoder('utf-8').decode(buf);
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM除去
+    } catch(e) {
+      text = new TextDecoder('shift-jis').decode(buf);
+    }
+
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+
+    // A列（index 0）→ 媒体ID、L列（index 11）→ クライアント名称
+    const contractMap = new Map();
+    for (const line of lines) {
+      const cols = parseCSVLine(line);
+      const id     = (cols[0]  || '').trim();
+      const client = (cols[11] || '').trim();
+      if (id) contractMap.set(id, client);
+    }
+
+    // 管理中媒体を照合・更新
+    const managed = liveData.filter(x => x.category === '管理中');
+    let updated = 0, matched = 0;
+
+    for (const item of managed) {
+      if (!contractMap.has(item.id)) continue;
+      matched++;
+      const client = contractMap.get(item.id);
+      const status = client ? '契約中' : '未契約';
+      if (item.contract_status !== status || item.client_name !== client) {
+        await saveEdit(item.id, { contract_status: status, client_name: client });
+        item.contract_status = status;
+        item.client_name = client;
+        updated++;
+      }
+    }
+
+    applyFilters();
+    const unmatched = managed.length - matched;
+    showToast(
+      `✅ 契約状況を更新しました（🟢契約中 ${managed.filter(x=>x.contract_status==='契約中').length}件 / 🔴未契約 ${managed.filter(x=>x.contract_status==='未契約').length}件` +
+      (unmatched > 0 ? ` / CSV未一致 ${unmatched}件` : '') + ')'
+    , 5000);
+
+  } catch(e) {
+    showToast('❌ CSV読み込み失敗: ' + e.message, 4000);
+  }
+}
+
 async function exportZIP() {
   if (!filteredData || filteredData.length === 0) { alert('エクスポートするデータがありません'); return; }
 
@@ -1652,11 +1735,14 @@ function renderList() {
     const dot = item.category === '管理中' ? 'dot-managed' : item.category === '解約済み' ? 'dot-cancelled' : 'dot-surveyed';
     const fee = item.annual_fee ? `<span class="item-price">¥${item.annual_fee.toLocaleString()}/年</span>` : '';
     const sz = item.size && item.size !== '—' ? ` · ${item.size}` : '';
+    const contractBadge = item.category === '管理中' && item.contract_status
+      ? `<span class="contract-badge ${item.contract_status === '契約中' ? 'active' : 'inactive'}">${item.contract_status}</span>`
+      : '';
 
     div.innerHTML = `
       <div class="item-dot ${dot}"></div>
       <div class="item-content">
-        <div class="item-name">${item.name}</div>
+        <div class="item-name">${item.name}${contractBadge}</div>
         <div class="item-address">${item.address}</div>
         <div class="item-meta">${item.format||'—'}${sz} ${fee}</div>
       </div>`;
@@ -1749,7 +1835,13 @@ function showDetail(item) {
       <div class="detail-row"><span class="detail-label">担当者</span><span class="detail-value">${fmt(item.manager)}</span></div>
       <div class="detail-row"><span class="detail-label">調査日</span><span class="detail-value">${fmt(item.survey_date)}</span></div>
       ${item.notes ? `<div class="detail-row"><span class="detail-label">備考</span><span class="detail-value notes">${item.notes}</span></div>` : ''}
-    </div>`;
+    </div>
+    ${item.category === '管理中' && item.contract_status ? `
+    <div class="detail-section">
+      <div class="detail-section-title">契約状況</div>
+      <div class="detail-row"><span class="detail-label">ステータス</span><span class="detail-value ${item.contract_status === '契約中' ? 'detail-contract-active' : 'detail-contract-inactive'}">${item.contract_status === '契約中' ? '🟢 契約中' : '🔴 未契約'}</span></div>
+      ${item.client_name ? `<div class="detail-row"><span class="detail-label">クライアント</span><span class="detail-value">${item.client_name}</span></div>` : ''}
+    </div>` : ''}`;
 
   document.getElementById('detail-panel').classList.add('open');
   if (window.innerWidth <= 768) closeMobileSidebar();
@@ -3022,6 +3114,7 @@ window.openFormAdd      = openFormAdd;
 window.toggleAreaSelect = toggleAreaSelect;
 window.clearAreaSelect  = clearAreaSelect;
 window.exportZIP        = exportZIP;
+window.handleContractCSV = handleContractCSV;
 window.openFormEdit     = openFormEdit;
 window.closeForm        = closeForm;
 window.geocodeAddress   = geocodeAddress;
