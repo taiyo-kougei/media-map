@@ -67,8 +67,10 @@
     .badge-managed    { background: rgba(26,115,232,0.9);  border: 1px solid rgba(255,255,255,0.2); }
     .badge-surveyed   { background: rgba(234,67,53,0.9);   border: 1px solid rgba(255,255,255,0.2); }
     .badge-cancelled  { background: rgba(100,100,100,0.9); border: 1px solid rgba(255,255,255,0.2); }
-    .badge-contracted { background: rgba(52,168,83,0.9);   border: 1px solid rgba(255,255,255,0.2); cursor: pointer; }
+    .badge-contracted   { background: rgba(26,115,232,0.9);  border: 1px solid rgba(255,255,255,0.2); cursor: pointer; }
     .badge-contracted:hover { opacity: 0.85; }
+    .badge-uncontracted { background: rgba(249,171,0,0.9);   border: 1px solid rgba(255,255,255,0.2); cursor: pointer; }
+    .badge-uncontracted:hover { opacity: 0.85; }
 
     /* ── Main Layout ─────────────────────────── */
     #main { display: flex; flex: 1; overflow: hidden; position: relative; }
@@ -195,10 +197,11 @@
       box-shadow: 0 0 0 2px rgba(255,255,255,0.8), 0 0 0 3px currentColor;
     }
     .dot-managed       { background: #1a73e8; color: #1a73e8; }
-    .dot-uncontracted  { background: #34a853; color: #34a853; }
+    .dot-uncontracted  { background: #f9ab00; color: #f9ab00; }
     .dot-surveyed      { background: #ea4335; color: #ea4335; }
     .dot-cancelled     { background: #646464; color: #646464; }
-    .filter-btn.active-green { background: #34a853; color: white; border-color: #34a853; }
+    .filter-btn.active-green  { background: #1a73e8; color: white; border-color: #1a73e8; }
+    .filter-btn.active-yellow { background: #f9ab00; color: white; border-color: #f9ab00; }
 
     .item-content { flex: 1; min-width: 0; }
     .item-name { font-size: 13px; font-weight: 600; color: #202124; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1017,7 +1020,8 @@
   </div>
   <div class="badge-group">
     <span class="badge badge-managed" id="badge-managed">管理中: 0件</span>
-    <span class="badge badge-contracted" id="badge-contracted" onclick="toggleContractBadge()" title="クリックで契約中に絞り込む">契約中: 0件</span>
+    <span class="badge badge-contracted"   id="badge-contracted"   onclick="toggleContractBadge()"   title="クリックで契約中に絞り込む">契約中: 0件</span>
+    <span class="badge badge-uncontracted" id="badge-uncontracted" onclick="toggleUncontractBadge()" title="クリックで未契約に絞り込む">未契約: 0件</span>
     <span class="badge badge-surveyed" id="badge-surveyed">調査済み: 0件</span>
     <span class="badge badge-cancelled" id="badge-cancelled">解約済み: 0件</span>
   </div>
@@ -1040,7 +1044,8 @@
         <button class="filter-btn"        data-cat="管理中"   onclick="setCat(this,'管理中')">🔵 管理中</button>
         <button class="filter-btn"        data-cat="調査済み" onclick="setCat(this,'調査済み')">🔴 調査済み</button>
         <button class="filter-btn"        data-cat="解約済み" onclick="setCat(this,'解約済み')">⚫ 解約済み</button>
-        <button class="filter-btn" id="contract-filter-btn"  onclick="toggleContractFilter(this)">🟢 契約中</button>
+        <button class="filter-btn" id="contract-filter-btn"   onclick="toggleContractFilter(this)">🔵 契約中</button>
+        <button class="filter-btn" id="uncontract-filter-btn" onclick="toggleUncontractFilter(this)">🟡 未契約</button>
       </div>
       <div class="filter-row" style="margin-top:8px;">
         <select class="filter-select" id="sel-manager" onchange="applyFilters()">
@@ -1648,7 +1653,9 @@ const cluster = new markerClusterer.MarkerClusterer({
 function makeIcon(category, active=false, contractStatus='') {
   let c;
   if (category === '管理中') {
-    c = contractStatus === '契約中' ? '#1a73e8' : '#34a853'; // 契約中=青 / 未契約・未設定=緑
+    if (contractStatus === '契約中') c = '#1a73e8';       // 契約中=青
+    else if (contractStatus === '未契約') c = '#f9ab00';  // 未契約=黄
+    else c = '#f9ab00';                                    // 未設定=黄
   } else if (category === '解約済み') {
     c = '#646464';
   } else {
@@ -1671,7 +1678,8 @@ function makeIcon(category, active=false, contractStatus='') {
 let allMarkers = {};
 let filteredData = [];
 let catFilter = 'all';
-let contractFilter = false; // 契約中フィルター
+let contractFilter = false;   // 契約中フィルター
+let uncontractFilter = false; // 未契約フィルター
 let activeItem = null;
 let sidebarCollapsed = false;
 
@@ -1724,13 +1732,30 @@ function setCat(btn, cat) {
 
 function toggleContractFilter(btn) {
   contractFilter = !contractFilter;
+  if (contractFilter) uncontractFilter = false; // 排他
   btn.classList.toggle('active-green', contractFilter);
+  const ubtn = document.getElementById('uncontract-filter-btn');
+  if (ubtn) ubtn.classList.remove('active-yellow');
   applyFilters();
 }
 
 function toggleContractBadge() {
   const btn = document.getElementById('contract-filter-btn');
   toggleContractFilter(btn);
+}
+
+function toggleUncontractFilter(btn) {
+  uncontractFilter = !uncontractFilter;
+  if (uncontractFilter) contractFilter = false; // 排他
+  btn.classList.toggle('active-yellow', uncontractFilter);
+  const cbtn = document.getElementById('contract-filter-btn');
+  if (cbtn) cbtn.classList.remove('active-green');
+  applyFilters();
+}
+
+function toggleUncontractBadge() {
+  const btn = document.getElementById('uncontract-filter-btn');
+  toggleUncontractFilter(btn);
 }
 
 function applyFilters() {
@@ -1748,6 +1773,7 @@ function applyFilters() {
       if (!areaFilterBounds.contains({ lat: item.lat, lng: item.lng })) return false;
     }
     if (contractFilter && item.contract_status !== '契約中') return false;
+    if (uncontractFilter && item.contract_status === '契約中') return false;
     return true;
   });
 
@@ -1963,9 +1989,11 @@ function updateBadges(data) {
   const managed    = data.filter(d => d.category === '管理中').length;
   const surveyed   = data.filter(d => d.category === '調査済み').length;
   const cancelled  = data.filter(d => d.category === '解約済み').length;
-  const contracted = data.filter(d => d.category === '管理中' && d.contract_status === '契約中').length;
-  document.getElementById('badge-managed').textContent    = `管理中: ${managed}件`;
-  document.getElementById('badge-contracted').textContent = `契約中: ${contracted}件`;
+  const contracted   = data.filter(d => d.category === '管理中' && d.contract_status === '契約中').length;
+  const uncontracted = data.filter(d => d.category === '管理中' && d.contract_status !== '契約中').length;
+  document.getElementById('badge-managed').textContent      = `管理中: ${managed}件`;
+  document.getElementById('badge-contracted').textContent   = `契約中: ${contracted}件`;
+  document.getElementById('badge-uncontracted').textContent = `未契約: ${uncontracted}件`;
   document.getElementById('badge-surveyed').textContent   = `調査済み: ${surveyed}件`;
   document.getElementById('badge-cancelled').textContent  = `解約済み: ${cancelled}件`;
 }
@@ -3183,7 +3211,9 @@ window.closeMobileSidebar  = closeMobileSidebar;
 window.openFormAdd      = openFormAdd;
 window.toggleAreaSelect    = toggleAreaSelect;
 window.toggleContractFilter = toggleContractFilter;
-window.toggleContractBadge  = toggleContractBadge;
+window.toggleContractBadge    = toggleContractBadge;
+window.toggleUncontractFilter = toggleUncontractFilter;
+window.toggleUncontractBadge  = toggleUncontractBadge;
 window.clearAreaSelect  = clearAreaSelect;
 window.exportZIP        = exportZIP;
 window.handleContractCSV = handleContractCSV;
