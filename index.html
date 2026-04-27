@@ -67,7 +67,7 @@
     .badge-managed    { background: rgba(26,115,232,0.9);  border: 1px solid rgba(255,255,255,0.2); }
     .badge-surveyed   { background: rgba(234,67,53,0.9);   border: 1px solid rgba(255,255,255,0.2); }
     .badge-cancelled  { background: rgba(100,100,100,0.9); border: 1px solid rgba(255,255,255,0.2); }
-    .badge-contracted   { background: rgba(26,115,232,0.9);  border: 1px solid rgba(255,255,255,0.2); cursor: pointer; }
+    .badge-contracted   { background: rgba(52,168,83,0.9);   border: 1px solid rgba(255,255,255,0.2); cursor: pointer; }
     .badge-contracted:hover { opacity: 0.85; }
     .badge-uncontracted { background: rgba(249,171,0,0.9);   border: 1px solid rgba(255,255,255,0.2); cursor: pointer; }
     .badge-uncontracted:hover { opacity: 0.85; }
@@ -200,7 +200,7 @@
     .dot-uncontracted  { background: #f9ab00; color: #f9ab00; }
     .dot-surveyed      { background: #ea4335; color: #ea4335; }
     .dot-cancelled     { background: #646464; color: #646464; }
-    .filter-btn.active-green  { background: #1a73e8; color: white; border-color: #1a73e8; }
+    .filter-btn.active-green  { background: #34a853; color: white; border-color: #34a853; }
     .filter-btn.active-yellow { background: #f9ab00; color: white; border-color: #f9ab00; }
 
     .item-content { flex: 1; min-width: 0; }
@@ -1044,7 +1044,7 @@
         <button class="filter-btn"        data-cat="管理中"   onclick="setCat(this,'管理中')">🔵 管理中</button>
         <button class="filter-btn"        data-cat="調査済み" onclick="setCat(this,'調査済み')">🔴 調査済み</button>
         <button class="filter-btn"        data-cat="解約済み" onclick="setCat(this,'解約済み')">⚫ 解約済み</button>
-        <button class="filter-btn" id="contract-filter-btn"   onclick="toggleContractFilter(this)">🔵 契約中</button>
+        <button class="filter-btn" id="contract-filter-btn"   onclick="toggleContractFilter(this)">🟢 契約中</button>
         <button class="filter-btn" id="uncontract-filter-btn" onclick="toggleUncontractFilter(this)">🟡 未契約</button>
       </div>
       <div class="filter-row" style="margin-top:8px;">
@@ -1653,7 +1653,7 @@ const cluster = new markerClusterer.MarkerClusterer({
 function makeIcon(category, active=false, contractStatus='') {
   let c;
   if (category === '管理中') {
-    if (contractStatus === '契約中') c = '#1a73e8';       // 契約中=青
+    if (contractStatus === '契約中') c = '#34a853';        // 契約中=緑
     else if (contractStatus === '未契約') c = '#f9ab00';  // 未契約=黄
     else c = '#f9ab00';                                    // 未設定=黄
   } else if (category === '解約済み') {
@@ -1772,8 +1772,8 @@ function applyFilters() {
     if (areaFilterBounds && item.lat && item.lng) {
       if (!areaFilterBounds.contains({ lat: item.lat, lng: item.lng })) return false;
     }
-    if (contractFilter && item.contract_status !== '契約中') return false;
-    if (uncontractFilter && item.contract_status === '契約中') return false;
+    if (contractFilter && !(item.category === '管理中' && item.contract_status === '契約中')) return false;
+    if (uncontractFilter && !(item.category === '管理中' && item.contract_status !== '契約中')) return false;
     return true;
   });
 
