@@ -3186,12 +3186,34 @@ async function startApp() {
     }
   }
 
-  // Firestoreから読み込み（初回はMEDIA_DATAをシード）
-  setStatus('データを同期中…');
-  await loadFromFirestore();
-  setSourceBar(true);
+  // ── ローカルデータで即時表示（Firestoreを待たない）──────────
+  const localData = (typeof MEDIA_DATA !== 'undefined' && MEDIA_DATA.length > 0)
+    ? [...MEDIA_DATA] : [];
+  liveData = localData;
+  setSourceBar(localData.length > 0); // ローカルがあれば仮表示
   hideLoading();
   init(liveData);
+
+  // ── バックグラウンドでFirestore同期（失敗しても画面に影響なし）──
+  setStatus('Firestoreと同期中…');
+  try {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore timeout')), 12000)
+    );
+    const snap = await Promise.race([getDocs(mediaCol), timeout]);
+    if (snap.empty && localData.length > 0) {
+      // 初回: ローカルデータをFirestoreに登録
+      await seedFirestore();
+    } else if (!snap.empty) {
+      // Firestoreのデータで上書き（最新データを反映）
+      liveData = snap.docs.map(d => d.data());
+      setSourceBar(true);
+      updateBadges(liveData);
+      applyFilters();
+    }
+  } catch(e) {
+    console.warn('Firestore同期スキップ（ローカルデータで動作中）:', e.message);
+  }
   setupRealtimeSync();
 }
 
