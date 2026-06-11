@@ -1291,6 +1291,17 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/tesseract.min.js?v=5"></script>
 <script src="media_data.js?v=20260423"></script>
+<script>
+// 安全タイムアウト: 20秒後もローディング中なら強制非表示（JSエラー等の保険）
+setTimeout(function() {
+  var lo = document.getElementById('loading-overlay');
+  if (lo && lo.parentNode) {
+    lo.style.opacity = '0';
+    setTimeout(function() { if (lo.parentNode) lo.remove(); }, 500);
+    console.warn('⚠️ ローディングタイムアウト（20秒）: 強制終了');
+  }
+}, 20000);
+</script>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, onSnapshot, writeBatch } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -2709,7 +2720,11 @@ let _unsubscribe = null;
 async function loadFromFirestore() {
   showToast('📡 データを読み込んでいます…');
   try {
-    const snap = await getDocs(mediaCol);
+    // 10秒でタイムアウト → ローカルデータにフォールバック
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Firestore timeout')), 10000)
+    );
+    const snap = await Promise.race([getDocs(mediaCol), timeout]);
     if (snap.empty) {
       // 初回: MEDIA_DATAをFirestoreに一括登録
       showToast('📤 初期データを登録中…（しばらくお待ちください）');
@@ -2718,8 +2733,9 @@ async function loadFromFirestore() {
       liveData = snap.docs.map(d => d.data());
     }
   } catch(e) {
-    console.warn('Firestore読み込み失敗、ローカルデータを使用:', e);
-    liveData = [...MEDIA_DATA];
+    console.warn('Firestore読み込み失敗、ローカルデータを使用:', e.message);
+    liveData = typeof MEDIA_DATA !== 'undefined' ? [...MEDIA_DATA] : [];
+    showToast('⚠️ オフラインモード（ローカルデータを表示中）', 4000);
   }
 }
 
